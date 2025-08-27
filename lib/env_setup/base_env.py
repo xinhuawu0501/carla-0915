@@ -4,11 +4,12 @@ import random
 import math
 import numpy as np
 import queue
-from lib.util.image_processing import cv_display
+from lib.util.image_processing import cv_display, process_rgb_img, process_semantic_img
 
 
 class CarBaseEnv():
     is_sync = False
+    collision_data = []
     
     def __init__(self):
         self.client = carla.Client("localhost", 2000)
@@ -18,29 +19,69 @@ class CarBaseEnv():
 
         self.spawn_points = self.world.get_map().get_spawn_points()
         self.spectator = self.world.get_spectator()
-                
-    def spawn_car(self, sp=None):
+
+      
+    def spawn_car(self, 
+                  sp=None, 
+                  sensor_options={'semantic': True, 'rgb': False, 'colsen': True},
+                  IMG_X=800,
+                  IMG_Y=600):
         self.vehicle_bps = self.world_bp.filter('vehicle.*.*')
         self.vehicle_bp = self.vehicle_bps[0]
-        self.cam_bp = self.world_bp.find('sensor.camera.rgb')
-        self.cam_bp.set_attribute('image_size_x', '800')
-        self.cam_bp.set_attribute('image_size_y', '600')
-        self.cam_bp.set_attribute('fov', '110')
-
-        self.image_queue = queue.Queue()
 
         if not sp:
             self.car_sp = random.choice(self.spawn_points)
-
 
         self.car = self.world.spawn_actor(self.vehicle_bp, self.car_sp)
         print(f'spawned {self.car.id}')
 
         cam_transform = carla.Transform(carla.Location(x=-4, z=3), carla.Rotation(pitch=-15))
-        self.rgb_cam = self.world.spawn_actor(self.cam_bp, cam_transform, attach_to=self.car)
-        self.rgb_cam.listen(lambda img: self.image_queue.put(img))
 
-    
+        if sensor_options.rgb:
+            self.image_queue = queue.Queue()
+            self.cam_bp = self.world_bp.find('sensor.camera.rgb')
+            self.cam_bp.set_attribute('image_size_x', str(IMG_X))
+            self.cam_bp.set_attribute('image_size_y', str(IMG_Y))
+            self.cam_bp.set_attribute('fov', '110')
+
+            self.rgb_cam = self.world.spawn_actor(self.cam_bp, cam_transform, attach_to=self.car)
+            self.rgb_cam.listen(lambda img: self.image_queue.put(img))
+
+        if sensor_options.semantic:
+            self.semantic_img_queue = queue.Queue()
+            cam_bp = self.world_bp.find('sensor.camera.semantic_segmentation')
+            cam_bp.set_attribute('image_size_x', str(IMG_X))
+            cam_bp.set_attribute('image_size_y', str(IMG_Y))
+            cam_bp.set_attribute('fov', '90')
+            self.semantic_cam = self.world.spawn_actor(cam_bp, cam_transform, attach_to=self.car)
+            self.semantic_cam.listen(lambda img: self.semantic_img_queue.put(img))
+
+        if sensor_options.colsen:
+            self.colsen_bp = self.world_bp.find('sensor.other.collision')
+            self.colsen = self.world.spawn_actor(self.colsen_bp, carla.Transform(), attach_to=self.car)
+            self.colsen.listen(lambda event: self.collision_data.append(event))
+
+        time.sleep(3.0)
+
+
+    def apply_control(self, control):
+        self.car.apply_control(control)
+
+    def clear_image_queue(self):
+        if self.image_queue:
+            while not self.image_queue.empty():
+                try:
+                    self.image_queue.get_nowait()
+                except queue.Empty:
+                    break
+        if self.semantic_img_queue:
+            while not self.semantic_img_queue.empty():
+                try:
+                    self.semantic_img_queue.get_nowait()
+                except queue.Empty:
+                    break
+        
+
     def move_spectator_to_loc(self, location):
         spec_trans = location 
         spec_trans.z += 2.0
@@ -51,9 +92,20 @@ class CarBaseEnv():
     def display_rgb(self):
         try:
             image = self.image_queue.get(block=False)
-            cv_display(image=image)
+            arr = process_rgb_img(image)
+            cv_display(arr)
         except queue.Empty:
-            print('empty')
+            print('rgb empty')
+
+    def display_semantic(self, image):
+        try:
+            image = self.image_queue.get(block=False)
+            arr = process_semantic_img(image)
+            cv_display(arr)
+        
+        except queue.Empty:
+            print('rgb empty')
+
 
     def set_sync(self):
         settings = self.world.get_settings()
