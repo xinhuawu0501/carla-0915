@@ -7,7 +7,7 @@ import queue
 from lib.util.image_processing import cv_display
 
 
-class CarBaseEnv:
+class CarBaseEnv():
     is_sync = False
     
     def __init__(self):
