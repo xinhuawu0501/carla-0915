@@ -226,11 +226,11 @@ class CarBaseEnv():
                 persistent_lines=True
             )
 
-    def draw_crosswalk(self, crosswalk_points):
-        for loc in crosswalk_points:
+    def draw_locations(self, locations: list[carla.Location], displayed_str=''):
+        for loc in locations:
             self.world.debug.draw_string(
                 loc + carla.Location(z=0.2),
-                'cross' + str(loc),
+                displayed_str + str(loc),
                 color=carla.Color(255, 0, 0),
                 life_time=60.0
             )
@@ -250,10 +250,11 @@ class CarBaseEnv():
             return carla.Vector3D(0.0, 0.0, 0.0)
         return carla.Vector3D(x=dx/length, y=dy/length, z=dz/length)
     
+    #=========== crosswalk utilities ===================================================#
     def get_all_crosswalk(self, draw_str=False) -> list[carla.Location]:
         self.crosswalks = self.world_map.get_crosswalks()
         if draw_str:
-            self.draw_crosswalk(self.crosswalks)
+            self.draw_locations(self.crosswalks, displayed_str='cw')
         return self.crosswalks
     
     def get_locations_in_crosswalk(self, crosswalk_point) -> list[carla.Location]:
@@ -263,7 +264,7 @@ class CarBaseEnv():
             return self.crosswalks[indexes[0]:indexes[1]]
         except Exception as e:
             print(e)
-            return None
+            return []
     
     def get_opposite_point_in_crosswalk(self, entry):
         index = self.crosswalks.index(entry)
@@ -278,33 +279,22 @@ class CarBaseEnv():
             self.draw_wp(self.intersections)
         return self.intersections
     
-    def get_wp_leading_to_crosswalk(self):
-        # Filter waypoints whose next waypoint leads into a crosswalk
-        intersection_to_crosswalk = []
+    def get_wp_leading_to_crosswalk(self, cw=None):
+        lanes_to_crosswalk = []
         if not hasattr(self, 'intersections'):
             self.get_all_intersections(draw_str=False)
 
         if not hasattr(self, 'crosswalks'):
             self.get_all_crosswalk(draw_str=False)
 
-        cw = random.choice(self.get_all_crosswalk())
-        ps = self.get_locations_in_crosswalk(cw)
-        self.draw_crosswalk(ps)
+        if not cw:
+            cw = random.choice(self.crosswalks)
 
-        i = self.crosswalks.index(cw)
-        pts = [(cw.x, cw.y)]
-        for ind in range(1, 4):
-            p = self.crosswalks[i + ind]
-            tp = (p.x, p.y)
-            pts.append(tp)
+        loc_in_cw = self.get_locations_in_crosswalk(cw)
+        crosswalk_polygon = Polygon([(pt.x, pt.y) for pt in loc_in_cw])
+        wps_in_crosswalk_polygon = [wp for wp in self.intersections if crosswalk_polygon.contains(Point(wp.transform.location.x, wp.transform.location.y))]
 
-        crosswalk_polygon = Polygon(pts)
-        for it in self.intersections:
-            loc = it.transform.location
-            pt = Point(loc.x, loc.y)
-            is_in_cw = crosswalk_polygon.contains(pt)
-            if is_in_cw:
-                self.draw_wp([it])
+        self.draw_wp(wps_in_crosswalk_polygon)
 
 
 
