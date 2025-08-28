@@ -187,12 +187,12 @@ class CarBaseEnv():
         return self.wps
    
 
-    def draw_wp(self, wps):
+    def draw_wp(self, wps, strg=''):
         for wp in wps:
             loc = wp.transform.location + carla.Location(z=0.2)
             self.world.debug.draw_string(
                 loc,
-                'wp'+str(wp.id),
+                strg,
                 color=carla.Color(255, 255, 0),
                 life_time=60.0
             )
@@ -294,8 +294,17 @@ class CarBaseEnv():
         crosswalk_polygon = Polygon([(pt.x, pt.y) for pt in loc_in_cw])
         wps_in_crosswalk_polygon = [wp for wp in self.intersections if crosswalk_polygon.contains(Point(wp.transform.location.x, wp.transform.location.y))]
 
-        self.draw_wp(wps_in_crosswalk_polygon)
+        for i, wp in enumerate(wps_in_crosswalk_polygon):
+            prev = wp.previous(10.0)[0]
+            nxt = wp.next(10.0)[0]
 
+            route = [prev, wp, nxt]
+            lanes_to_crosswalk.append(route)
+
+        self.draw_wp(lanes_to_crosswalk[0], strg=f'lan')
+        self.move_spectator_to_loc(lanes_to_crosswalk[0][0].transform.location)
+
+        return lanes_to_crosswalk
 
 
     def spawn_walker(self, spawn_point=None):
