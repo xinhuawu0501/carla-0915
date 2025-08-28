@@ -6,6 +6,7 @@ import numpy as np
 import queue
 from lib.util.image_processing import cv_display, process_rgb_img, process_semantic_img
 import cv2
+from shapely import Polygon, Point
 
 class CarBaseEnv():
     is_sync = False
@@ -16,8 +17,8 @@ class CarBaseEnv():
         self.client.set_timeout(5.0)
         self.world = self.client.load_world('Town10HD')
         self.world_bp = self.world.get_blueprint_library()
-
-        self.spawn_points = self.world.get_map().get_spawn_points()
+        self.world_map = self.world.get_map()
+        self.spawn_points = self.world_map.get_spawn_points()
         self.spectator = self.world.get_spectator()
 
       
@@ -181,23 +182,24 @@ class CarBaseEnv():
                 life_time=60.0
             )
 
-    def draw_wp(self):
-        self.wps = self.world.get_map().generate_waypoints(distance=1.0)
-        sidewalk_wps = [wp for wp in self.wps if wp.lane_type == carla.LaneType.Sidewalk]
+    def generate_wp(self, distance=2.0):
+        self.wps = self.world_map.generate_waypoints(distance=distance)
+        return self.wps
+   
 
-        print(f"Found {len(sidewalk_wps)} sidewalk waypoints")
-        for wp in self.spawn_points:
+    def draw_wp(self, wps):
+        for wp in wps:
             loc = wp.transform.location + carla.Location(z=0.2)
             self.world.debug.draw_string(
                 loc,
-                str(wp.id),
+                'wp'+str(wp.id),
                 color=carla.Color(255, 255, 0),
                 life_time=60.0
             )
 
     def create_route(self):
         waypoints = []
-        self.wps = self.world.get_map().generate_waypoints(distance=5.0)
+        self.wps = self.world_map.generate_waypoints(distance=5.0)
 
         
         start = self.wps[0]
@@ -224,13 +226,12 @@ class CarBaseEnv():
                 persistent_lines=True
             )
 
-    def draw_crosswalk(self):
-        for loc in self.crosswalks:
-            print(loc)
+    def draw_crosswalk(self, crosswalk_points):
+        for loc in crosswalk_points:
             self.world.debug.draw_string(
                 loc + carla.Location(z=0.2),
-                str(loc),
-                color=carla.Color(255, 255, 0),
+                'cross' + str(loc),
+                color=carla.Color(255, 0, 0),
                 life_time=60.0
             )
 
@@ -248,18 +249,74 @@ class CarBaseEnv():
         if length == 0:
             return carla.Vector3D(0.0, 0.0, 0.0)
         return carla.Vector3D(x=dx/length, y=dy/length, z=dz/length)
+    
+    def get_all_crosswalk(self, draw_str=False) -> list[carla.Location]:
+        self.crosswalks = self.world_map.get_crosswalks()
+        if draw_str:
+            self.draw_crosswalk(self.crosswalks)
+        return self.crosswalks
+    
+    def get_locations_in_crosswalk(self, crosswalk_point) -> list[carla.Location]:
+        try:
+            indexes = [index for index, loc in enumerate(self.crosswalks) if loc == crosswalk_point ]
+            print(indexes)
+            return self.crosswalks[indexes[0]:indexes[1]]
+        except Exception as e:
+            print(e)
+            return None
+    
+    def get_opposite_point_in_crosswalk(self, entry):
+        index = self.crosswalks.index(entry)
+        exit = self.crosswalks[index + 3]
+        return exit
+    
+    def get_all_intersections(self, draw_str=False):
+        waypoints = self.generate_wp(2.0)
+
+        self.intersections = [wp for wp in waypoints if wp.is_intersection]
+        if draw_str:
+            self.draw_wp(self.intersections)
+        return self.intersections
+    
+    def get_wp_leading_to_crosswalk(self):
+        # Filter waypoints whose next waypoint leads into a crosswalk
+        intersection_to_crosswalk = []
+        if not hasattr(self, 'intersections'):
+            self.get_all_intersections(draw_str=False)
+
+        if not hasattr(self, 'crosswalks'):
+            self.get_all_crosswalk(draw_str=False)
+
+        cw = random.choice(self.get_all_crosswalk())
+        ps = self.get_locations_in_crosswalk(cw)
+        self.draw_crosswalk(ps)
+
+        i = self.crosswalks.index(cw)
+        pts = [(cw.x, cw.y)]
+        for ind in range(1, 4):
+            p = self.crosswalks[i + ind]
+            tp = (p.x, p.y)
+            pts.append(tp)
+
+        crosswalk_polygon = Polygon(pts)
+        for it in self.intersections:
+            loc = it.transform.location
+            pt = Point(loc.x, loc.y)
+            is_in_cw = crosswalk_polygon.contains(pt)
+            if is_in_cw:
+                self.draw_wp([it])
+
 
 
     def spawn_walker(self, spawn_point=None):
         try:
-            self.crosswalks = self.world.get_map().get_crosswalks()
+            self.get_all_crosswalk()
 
             route = []
             self.draw_spawn_points()
             
             entry = random.choice(self.crosswalks)
-            index = self.crosswalks.index(entry)
-            exit = self.crosswalks[index + 3] # opposite point
+            self.get_opposite_point_in_crosswalk(entry)
             self.move_spectator_to_loc(entry)
 
             walker_bps = self.world_bp.filter('walker.pedestrian.*')
