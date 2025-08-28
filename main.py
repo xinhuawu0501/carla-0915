@@ -67,6 +67,7 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
        super().__init__()
 
        self.set_sync()
+       #!!! TODO: add local planner control to observation space
        self.observation_space = spaces.Dict({
             "image": spaces.Box(low=0, high=1, shape=(3, IMG_Y, IMG_X), dtype=np.float32),
             "velocity": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),  # vx, vy
