@@ -87,7 +87,7 @@ class CarBaseEnv():
         
     def move_spectator_to_loc(self, location):
         spec_trans = location 
-        spec_trans.z += 2.0
+        spec_trans.z += 20.0
         rot = carla.Rotation(pitch=-90.0, yaw=0.0, roll=0.0)
         self.spectator.set_transform(carla.Transform(spec_trans, rot))
     
@@ -250,6 +250,49 @@ class CarBaseEnv():
             return carla.Vector3D(0.0, 0.0, 0.0)
         return carla.Vector3D(x=dx/length, y=dy/length, z=dz/length)
     
+    def get_distance(self, a: carla.Location, b: carla.Location):
+        return a.distance(b)
+
+
+    def get_closest_spawn_point(self, target_location: carla.Location) -> carla.Transform:
+        closest_spawn = min(
+            self.spawn_points,
+            key=lambda sp: sp.location.distance(target_location)
+        )
+
+        return closest_spawn
+    #=========== sidewalk ===================================
+    def get_sidewalks(self, x_range=(-300, 300), y_range=(-300, 300), step=2.0):
+        """
+        Brute-force scan the map area to find sidewalk waypoints.
+        Args:
+            world: carla.World
+            x_range, y_range: area bounds in meters
+            step: grid resolution
+        Returns:
+            list of unique sidewalk waypoints
+        """
+        carla_map = self.world_map
+        sidewalk_wps = []
+        seen = set()
+
+        for x in range(int(x_range[0]), int(x_range[1]), int(step)):
+            for y in range(int(y_range[0]), int(y_range[1]), int(step)):
+                loc = carla.Location(x=float(x), y=float(y), z=0.0)
+                wp = carla_map.get_waypoint(
+                    loc,
+                    project_to_road=False,
+                    lane_type=carla.LaneType.Sidewalk
+                )
+                if wp and (wp.road_id, wp.lane_id, round(wp.s, 1)) not in seen:
+                    sidewalk_wps.append(wp)
+                    seen.add((wp.road_id, wp.lane_id, round(wp.s, 1)))
+        
+        for s in sidewalk_wps:
+            print(s.lane_type)
+        return sidewalk_wps
+
+
     #=========== crosswalk utilities ===================================================#
     def get_all_crosswalk(self, draw_str=False) -> list[carla.Location]:
         self.crosswalks = self.world_map.get_crosswalks()
@@ -257,18 +300,45 @@ class CarBaseEnv():
             self.draw_locations(self.crosswalks, displayed_str='cw')
         return self.crosswalks
     
-    def get_locations_in_crosswalk(self, crosswalk_point) -> list[carla.Location]:
+    def get_crosswalk_polygon(self, crosswalk_point) -> list[carla.Location]:
         try:
             indexes = [index for index, loc in enumerate(self.crosswalks) if loc == crosswalk_point ]
-            print(indexes)
+            succeed = len(indexes) > 1
+            if not succeed:
+                ind = 0
+                while ind < len(self.crosswalks):
+                    for i in range(ind + 1, len(self.crosswalks)):
+                        if self.crosswalks[i] == self.crosswalks[ind]:
+                            return self.crosswalks[ind:i]
+
+
             return self.crosswalks[indexes[0]:indexes[1]]
         except Exception as e:
             print(e)
             return []
     
-    def get_opposite_point_in_crosswalk(self, entry):
+    def get_closest_crosswalk_point_from_wp(self, crosswalk_pol, wp)->carla.Location:
+        loc = wp.transform.location
+        min_d = 1000000
+        result = None
+
+        for p in crosswalk_pol:
+            d = self.get_distance(p, loc)
+            if d < min_d:
+                min_d = d
+                result = p
+
+        return result
+        
+    
+    def get_opposite_point_in_crosswalk(self, entry, polygon):
         index = self.crosswalks.index(entry)
-        exit = self.crosswalks[index + 3]
+        exit = -1
+        for i in range(index + 1, len(polygon)):
+            cw = polygon[i]
+            if cw == entry:
+                exit = cw
+                break
         return exit
     
     def get_all_intersections(self, draw_str=False):
@@ -279,7 +349,7 @@ class CarBaseEnv():
             self.draw_wp(self.intersections)
         return self.intersections
     
-    def get_wp_leading_to_crosswalk(self, cw=None):
+    def get_lanes_passing_crosswalk(self, cw=None):
         lanes_to_crosswalk = []
         if not hasattr(self, 'intersections'):
             self.get_all_intersections(draw_str=False)
@@ -290,7 +360,8 @@ class CarBaseEnv():
         if not cw:
             cw = random.choice(self.crosswalks)
 
-        loc_in_cw = self.get_locations_in_crosswalk(cw)
+        loc_in_cw = self.get_crosswalk_polygon(cw)
+
         crosswalk_polygon = Polygon([(pt.x, pt.y) for pt in loc_in_cw])
         wps_in_crosswalk_polygon = [wp for wp in self.intersections if crosswalk_polygon.contains(Point(wp.transform.location.x, wp.transform.location.y))]
 
@@ -302,38 +373,35 @@ class CarBaseEnv():
             lanes_to_crosswalk.append(route)
 
         self.draw_wp(lanes_to_crosswalk[0], strg=f'lan')
-        self.move_spectator_to_loc(lanes_to_crosswalk[0][0].transform.location)
 
         return lanes_to_crosswalk
 
 
-    def spawn_walker(self, spawn_point=None):
+    def spawn_walker(self, route, speed=1.4):
         try:
-            self.get_all_crosswalk()
-
-            route = []
-            self.draw_spawn_points()
-            
-            entry = random.choice(self.crosswalks)
-            self.get_opposite_point_in_crosswalk(entry)
-            self.move_spectator_to_loc(entry)
-
             walker_bps = self.world_bp.filter('walker.pedestrian.*')
             bp = random.choice(walker_bps)
             # sp = spawn_point if spawn_point else random.choice(self.spawn_points)
+            entry, exit = route
             yaw = self.get_yaw_from_to(entry, exit)
-            sp = carla.Transform(entry, carla.Rotation(yaw=yaw))
-            self.walker = self.world.spawn_actor(bp, sp)
+            valid_sp = self.get_closest_spawn_point(entry)
+
+            sp = carla.Transform(valid_sp.location, carla.Rotation(yaw=yaw))
+            walker = self.world.spawn_actor(bp, sp)
+
+            print(f'spawn walker {walker.id}')
 
             control = carla.WalkerControl()
             control.direction = self.get_direction(entry, exit)
-            control.speed = 5
-            self.walker.apply_control(control)
-
-    
+            control.speed = speed
+            return walker, control
 
         except Exception as e:
             print(f'fail to spawn walker: {e}')
+            return None, None
+
+    def apply_walker_control(self, walker, control):
+        walker.apply_control(control)
    
     def change_weather(self, rain=0.0, cloud=0.0):
         weather = carla.WeatherParameters(
