@@ -11,6 +11,8 @@ from shapely import Polygon, Point
 class CarBaseEnv():
     is_sync = False
     collision_data = []
+    walker_list = []
+    walker_controller_list = []
     
     def __init__(self):
         self.client = carla.Client("localhost", 2000)
@@ -192,9 +194,9 @@ class CarBaseEnv():
             loc = wp.transform.location + carla.Location(z=0.2)
             self.world.debug.draw_string(
                 loc,
-                strg,
+                strg + str(wp.id),
                 color=carla.Color(255, 255, 0),
-                life_time=60.0
+                life_time=600.0
             )
 
     def create_route(self):
@@ -263,15 +265,6 @@ class CarBaseEnv():
         return closest_spawn
     #=========== sidewalk ===================================
     def get_sidewalks(self, x_range=(-300, 300), y_range=(-300, 300), step=2.0):
-        """
-        Brute-force scan the map area to find sidewalk waypoints.
-        Args:
-            world: carla.World
-            x_range, y_range: area bounds in meters
-            step: grid resolution
-        Returns:
-            list of unique sidewalk waypoints
-        """
         carla_map = self.world_map
         sidewalk_wps = []
         seen = set()
@@ -376,28 +369,55 @@ class CarBaseEnv():
 
         return lanes_to_crosswalk
 
-
-    def spawn_walker(self, route, speed=1.4):
+#=================== walker =========================================
+    def spawn_walker(self, speed=1.4):
         try:
-            walker_bps = self.world_bp.filter('walker.pedestrian.*')
-            bp = random.choice(walker_bps)
-            # sp = spawn_point if spawn_point else random.choice(self.spawn_points)
-            entry, exit = route
-            yaw = self.get_yaw_from_to(entry, exit)
-            valid_sp = self.get_closest_spawn_point(entry)
+            # 1. Get walker blueprint
+            walker_bp = random.choice(self.world_bp.filter("walker.pedestrian.*"))
+            if walker_bp.has_attribute("is_invincible"):
+                walker_bp.set_attribute("is_invincible", "false")
+ 
+            # 2. Get sidewalk waypoints
+            self.sidewalk_wps = self.get_sidewalks()
+            if not self.sidewalk_wps:
+                print("No sidewalk waypoints found!")
+                return None, None
 
-            sp = carla.Transform(valid_sp.location, carla.Rotation(yaw=yaw))
-            walker = self.world.spawn_actor(bp, sp)
+            # Pick a random entry waypoint for spawn
+            spawn_wp = random.choice(self.sidewalk_wps)
+            spawn_transform = spawn_wp.transform
+            spawn_transform.location.z += 0.5  # lift to avoid collision
 
-            print(f'spawn walker {walker.id}')
+            # 3. Spawn walker
+            walker = self.world.try_spawn_actor(walker_bp, spawn_transform)
+            if walker is None:
+                print("Failed to spawn walker (location blocked)")
+                return None, None
+            self.move_spectator_to_loc(spawn_transform.location)
 
-            control = carla.WalkerControl()
-            control.direction = self.get_direction(entry, exit)
-            control.speed = speed
-            return walker, control
+            # 4. Tick the world to ensure the walker is registered
+            self.world.tick()
+
+            # 5. Spawn AI controller
+            controller_bp = self.world_bp.find("controller.ai.walker")
+            controller = self.world.spawn_actor(controller_bp, carla.Transform(), attach_to=walker)
+            controller.start()
+            controller.set_max_speed(speed)
+
+            # 6. Pick a valid target on the **pedestrian navmesh**
+            target_loc = self.world.get_random_location_from_navigation()
+            controller.go_to_location(target_loc)
+
+            self.walker_controller_list.append(controller)
+            self.walker_list.append(walker)
+
+
+            print(f"✅ Walker spawned at {spawn_transform.location}, moving to {target_loc}")
+
+            return walker, controller
 
         except Exception as e:
-            print(f'fail to spawn walker: {e}')
+            print(f"Error spawning walker: {e}")
             return None, None
 
     def apply_walker_control(self, walker, control):

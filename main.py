@@ -10,6 +10,7 @@ import carla
 import numpy as np
 import queue
 import cv2
+import random
 
 
 class CustomPlanner(LocalPlanner):
@@ -66,7 +67,7 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
     def __init__(self):
        super().__init__()
 
-       self.set_sync()
+    #    self.set_sync()
        #!!! TODO: add local planner control to observation space
        self.observation_space = spaces.Dict({
             "image": spaces.Box(low=0, high=1, shape=(3, IMG_Y, IMG_X), dtype=np.float32),
@@ -193,21 +194,25 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
 
 
 
-# def init():
-#     env = AgentWithSensor()
+def init():
+    env = AgentWithSensor()
  
-#     try:
-#         env.reset()
-#         while True:
-#             env.display_rgb()
-#             env.car.apply_control(env.planner_control())
-#             env.world.tick()
-        
-       
-#     except KeyboardInterrupt:
-#         pass
-#     finally:
-#         env.cleanup()
+    try:
+        env.cleanup()
+        sw = env.get_sidewalks()
+        env.draw_wp(sw, strg="sw")
+        walker, controller = env.spawn_walker()
 
-# init()
+        while True:
+            if env.is_sync:
+                env.world.tick()
+            else:
+                env.world.wait_for_tick()
+       
+    except KeyboardInterrupt:
+        pass
+    finally:
+        env.cleanup()
+
+init()
 
