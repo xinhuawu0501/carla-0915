@@ -4,24 +4,27 @@ import carla
 DEFAULT_SPEED=1.4
 
 class Pedestrian:
-    def __init__(self, client, route=[], speed=DEFAULT_SPEED) -> None:
+    def __init__(self, client, route, speed=DEFAULT_SPEED) -> None:
         self.client = client
         self.world = self.client.world
         self.bp = self.world.get_blueprint_library()
         self.walker_bps = self.bp.filter("walker.pedestrian.*")
         self.world_map = self.world.get_map()
-        self.sidewalks = self.get_sidewalks()
 
         #if no specified spawn point and route, let walker wander randomly
-        self.spawn_walker(route=route, speed=speed) 
+        self.spawn_walker(route=route, speed=speed)
+        if self.walker:
+            return self.walker
+        else:
+            return None 
 
-    def spawn_walker(self, route=[], speed=DEFAULT_SPEED):
+    def spawn_walker(self, route, speed=DEFAULT_SPEED):
         try:
             bp = random.choice(self.walker_bps)
             if bp.has_attribute("is_invincible"):
                 bp.set_attribute("is_invincible", "false")
     
-            sp_wp = route[0] if route else random.choice(self.sidewalks)
+            sp_wp = route[0]
             spawn_transform = sp_wp.transform
             spawn_transform.location.z += 0.5  # lift to avoid collision
         
@@ -51,27 +54,6 @@ class Pedestrian:
             print(e)
             return None
 
-
-    def get_sidewalks(self, x_range=(-300, 300), y_range=(-300, 300), step=2.0):
-        carla_map = self.world_map
-        sidewalk_wps = []
-        seen = set()
-
-        for x in range(int(x_range[0]), int(x_range[1]), int(step)):
-            for y in range(int(y_range[0]), int(y_range[1]), int(step)):
-                loc = carla.Location(x=float(x), y=float(y), z=0.0) # type: ignore
-                wp = carla_map.get_waypoint(
-                    loc,
-                    project_to_road=False,
-                    lane_type=carla.LaneType.Sidewalk # type: ignore
-                )
-                if wp and (wp.road_id, wp.lane_id, round(wp.s, 1)) not in seen:
-                    sidewalk_wps.append(wp)
-                    seen.add((wp.road_id, wp.lane_id, round(wp.s, 1)))
-        
-        for s in sidewalk_wps:
-            print(s.lane_type)
-        return sidewalk_wps
 
 
 

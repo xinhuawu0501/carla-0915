@@ -6,7 +6,7 @@ import numpy as np
 import queue
 from lib.util.image_processing import cv_display, process_rgb_img, process_semantic_img
 import cv2
-from shapely import Polygon, Point
+from shapely.geometry import Polygon, Point
 
 class CarBaseEnv():
     is_sync = False
@@ -15,7 +15,7 @@ class CarBaseEnv():
     walker_controller_list = []
     
     def __init__(self):
-        self.client = carla.Client("localhost", 2000)
+        self.client = carla.Client("localhost", 2000) # type: ignore
         self.client.set_timeout(5.0)
         self.world = self.client.load_world('Town10HD')
         self.world_bp = self.world.get_blueprint_library()
@@ -65,7 +65,6 @@ class CarBaseEnv():
             self.colsen.listen(lambda event: self.collision_data.append(event))
 
         time.sleep(3.0)
-
 
     def apply_control(self, control):
         self.car.apply_control(control)
@@ -199,35 +198,6 @@ class CarBaseEnv():
                 life_time=600.0
             )
 
-    def create_route(self):
-        waypoints = []
-        self.wps = self.world_map.generate_waypoints(distance=5.0)
-
-        
-        start = self.wps[0]
-        print(start)
-        
-        waypoints = [start] + start.next_until_lane_end(2.0)
-        
-        route_ind = [36, 37, 32, 23, 128, 70, 130, 124]
-        route = []
-        for ind in route_ind:
-            route.append(self.spawn_points[ind].location)
-        # self.spectator.set_transform(self.spawn_points[route_ind[0]])
-
-        self.spawn_car(self.spawn_points[route_ind[0]])
-        self.car.set_autopilot(True, self.TM_PORT)
-        self.tm.set_path(self.car, route)
-
-        for i,s in enumerate(self.spawn_points):
-            self.world.debug.draw_string(
-                s.location,
-                text=str(i),
-                color=carla.Color(r=255, g=0, b=0),
-                life_time=1000.0,
-                persistent_lines=True
-            )
-
     def draw_locations(self, locations: list[carla.Location], displayed_str=''):
         for loc in locations:
             self.world.debug.draw_string(
@@ -255,7 +225,6 @@ class CarBaseEnv():
     def get_distance(self, a: carla.Location, b: carla.Location):
         return a.distance(b)
 
-
     def get_closest_spawn_point(self, target_location: carla.Location) -> carla.Transform:
         closest_spawn = min(
             self.spawn_points,
@@ -263,29 +232,7 @@ class CarBaseEnv():
         )
 
         return closest_spawn
-    #=========== sidewalk ===================================
-    def get_sidewalks(self, x_range=(-300, 300), y_range=(-300, 300), step=2.0):
-        carla_map = self.world_map
-        sidewalk_wps = []
-        seen = set()
-
-        for x in range(int(x_range[0]), int(x_range[1]), int(step)):
-            for y in range(int(y_range[0]), int(y_range[1]), int(step)):
-                loc = carla.Location(x=float(x), y=float(y), z=0.0)
-                wp = carla_map.get_waypoint(
-                    loc,
-                    project_to_road=False,
-                    lane_type=carla.LaneType.Sidewalk
-                )
-                if wp and (wp.road_id, wp.lane_id, round(wp.s, 1)) not in seen:
-                    sidewalk_wps.append(wp)
-                    seen.add((wp.road_id, wp.lane_id, round(wp.s, 1)))
-        
-        for s in sidewalk_wps:
-            print(s.lane_type)
-        return sidewalk_wps
-
-
+    
     #=========== crosswalk utilities ===================================================#
     def get_all_crosswalk(self, draw_str=False) -> list[carla.Location]:
         self.crosswalks = self.world_map.get_crosswalks()
@@ -293,7 +240,7 @@ class CarBaseEnv():
             self.draw_locations(self.crosswalks, displayed_str='cw')
         return self.crosswalks
     
-    def get_crosswalk_polygon(self, crosswalk_point) -> list[carla.Location]:
+    def _get_crosswalk_polygon(self, crosswalk_point) -> list[carla.Location]:
         try:
             indexes = [index for index, loc in enumerate(self.crosswalks) if loc == crosswalk_point ]
             succeed = len(indexes) > 1
@@ -310,7 +257,7 @@ class CarBaseEnv():
             print(e)
             return []
     
-    def get_closest_crosswalk_point_from_wp(self, crosswalk_pol, wp)->carla.Location:
+    def _get_closest_crosswalk_point_from_wp(self, crosswalk_pol, wp)->carla.Location:
         loc = wp.transform.location
         min_d = 1000000
         result = None
@@ -322,9 +269,8 @@ class CarBaseEnv():
                 result = p
 
         return result
-        
-    
-    def get_opposite_point_in_crosswalk(self, entry, polygon):
+          
+    def _get_opposite_point_in_crosswalk(self, entry, polygon):
         index = self.crosswalks.index(entry)
         exit = -1
         for i in range(index + 1, len(polygon)):
@@ -353,7 +299,7 @@ class CarBaseEnv():
         if not cw:
             cw = random.choice(self.crosswalks)
 
-        loc_in_cw = self.get_crosswalk_polygon(cw)
+        loc_in_cw = self._get_crosswalk_polygon(cw)
 
         crosswalk_polygon = Polygon([(pt.x, pt.y) for pt in loc_in_cw])
         wps_in_crosswalk_polygon = [wp for wp in self.intersections if crosswalk_polygon.contains(Point(wp.transform.location.x, wp.transform.location.y))]
@@ -369,60 +315,6 @@ class CarBaseEnv():
 
         return lanes_to_crosswalk
 
-#=================== walker =========================================
-    def spawn_walker(self, speed=1.4):
-        try:
-            # 1. Get walker blueprint
-            walker_bp = random.choice(self.world_bp.filter("walker.pedestrian.*"))
-            if walker_bp.has_attribute("is_invincible"):
-                walker_bp.set_attribute("is_invincible", "false")
- 
-            # 2. Get sidewalk waypoints
-            self.sidewalk_wps = self.get_sidewalks()
-            if not self.sidewalk_wps:
-                print("No sidewalk waypoints found!")
-                return None, None
-
-            # Pick a random entry waypoint for spawn
-            spawn_wp = random.choice(self.sidewalk_wps)
-            spawn_transform = spawn_wp.transform
-            spawn_transform.location.z += 0.5  # lift to avoid collision
-
-            # 3. Spawn walker
-            walker = self.world.try_spawn_actor(walker_bp, spawn_transform)
-            if walker is None:
-                print("Failed to spawn walker (location blocked)")
-                return None, None
-            self.move_spectator_to_loc(spawn_transform.location)
-
-            # 4. Tick the world to ensure the walker is registered
-            self.world.tick()
-
-            # 5. Spawn AI controller
-            controller_bp = self.world_bp.find("controller.ai.walker")
-            controller = self.world.spawn_actor(controller_bp, carla.Transform(), attach_to=walker)
-            controller.start()
-            controller.set_max_speed(speed)
-
-            # 6. Pick a valid target on the **pedestrian navmesh**
-            target_loc = self.world.get_random_location_from_navigation()
-            controller.go_to_location(target_loc)
-
-            self.walker_controller_list.append(controller)
-            self.walker_list.append(walker)
-
-
-            print(f"✅ Walker spawned at {spawn_transform.location}, moving to {target_loc}")
-
-            return walker, controller
-
-        except Exception as e:
-            print(f"Error spawning walker: {e}")
-            return None, None
-
-    def apply_walker_control(self, walker, control):
-        walker.apply_control(control)
-   
     def change_weather(self, rain=0.0, cloud=0.0):
         weather = carla.WeatherParameters(
         cloudiness=cloud,        # 0-100
@@ -458,7 +350,6 @@ class CarBaseEnv():
                 settings = self.world.get_settings()
                 settings.synchronous_mode = False
                 self.world.apply_settings(settings)
-            cv2.destroyAllWindows()
 
         except Exception as e:
             print(f'fail to clean up: {e}')
