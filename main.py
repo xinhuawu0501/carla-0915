@@ -2,6 +2,16 @@ from lib.env_setup.base_env import CarBaseEnv
 from lib.PythonAPI.carla.agents.navigation.local_planner import LocalPlanner
 from lib.util.image_processing import process_rgb_img, cv_display, process_semantic_img
 
+from lib.scenario_runner import scenario_runner  # if scenario_runner.py is needed
+from lib.scenario_runner.srunner.scenarioconfigs.openscenario_configuration import OpenScenarioConfiguration
+from lib.scenario_runner.srunner.scenariomanager.scenario_manager import ScenarioManager
+from lib.scenario_runner.srunner.scenariomanager.carla_data_provider import CarlaDataProvider
+
+from lib.scenario_runner.srunner.scenarios.follow_leading_vehicle import FollowLeadingVehicle
+
+
+import os
+
 import time
 import math
 import gymnasium as gym
@@ -196,22 +206,71 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
 
 def init():
     env = AgentWithSensor()
+    world = env.world
+    client = env.client
+
+
+    # sw = env.get_sidewalks()
+
+    scenario_file = os.path.join(
+        os.path.dirname(__file__),  # folder of main.py
+        "lib", "scenario_runner", "srunner", "scenarios", "pedestrian_crossing.xosc"
+    )
+    scen_config = OpenScenarioConfiguration(scenario_file, client=env.client, custom_params=None)
+    manager =ScenarioManager(env.world)
+    # # env.draw_wp(sw, strg="sw")
+    # # walker, controller = env.spawn_walker()
+
+    # CarlaDataProvider.set_client(env.client)
+    # CarlaDataProvider.set_world(env.world)
+
+    # done = False
+    # env.reset()
+
+    manager.load_scenario(scen_config)
+    manager.ego_vehicles = [env.car]  # tell ScenarioRunner which vehicle is ego
+    manager.run_scenario()
  
     try:
-        env.cleanup()
-        sw = env.get_sidewalks()
-        env.draw_wp(sw, strg="sw")
-        walker, controller = env.spawn_walker()
+            # initialize CarlaDataProvider with the world
+        CarlaDataProvider.set_client(client)
+        CarlaDataProvider.get_map(world)
 
+        env.reset()
+        car = env.car
+
+        scenario = FollowLeadingVehicle(world=world,
+                            ego_vehicles=[car],
+                            config=None,
+                            timeout=60,
+                            )
+
+        # setup scenario
+        scenario._setup_scenario_trigger(config=None)
+        scenario._setup_scenario_end(config=None)
+
+        # run scenario loop
         while True:
-            if env.is_sync:
-                env.world.tick()
-            else:
-                env.world.wait_for_tick()
+            world.tick()
+
+        # while manager._running:
+        #     # if env.is_sync:
+        #     #     env.world.tick()
+        #     # else:
+        #     #     env.world.wait_for_tick()
+        #     control = env.planner.run_step(debug=False)
+        #     env.car.apply_control(control)
+
+        #     # Tick the world
+        #     env.world.tick()
+
+         
        
     except KeyboardInterrupt:
         pass
     finally:
+        # manager.stop_scenario()
+        # manager.cleanup()
         env.cleanup()
 
 init()
