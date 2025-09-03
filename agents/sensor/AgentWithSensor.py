@@ -1,3 +1,4 @@
+from agents.local_planner import CustomPlanner
 from lib.env_setup.base_env import CarBaseEnv
 from lib.util.image_processing import process_semantic_img
 from lib.scenarios.pedestrian_crossing import PedestrianCrossingScenario
@@ -18,9 +19,10 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
     def __init__(self):
        super().__init__()
 
-    #    self.set_sync()
+       self.set_sync()
        #!!! TODO: add local planner control to observation space
        self.observation_space = spaces.Dict({
+            # "planner_control": spaces.Box(low=np.array([-1.0, 0.0, 0.0]), high=np.array([1.0, 1.0, 1.0]), dtype=np.float64),
             "image": spaces.Box(low=0, high=1, shape=(3, IMG_Y, IMG_X), dtype=np.float32),
             "velocity": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),  # vx, vy
         })
@@ -42,6 +44,7 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
             vy = np.clip(velocity.y / 50.0, -1.0, 1.0)
 
             obs = {
+                # "planner_control": 
                 "image": transposed_img.astype(np.float32) / 255.0,
                 "velocity": np.array([vx, vy], dtype=np.float32),
             }
