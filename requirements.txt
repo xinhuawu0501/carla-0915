@@ -1,0 +1,5 @@
+# carla==0.9.15
+opencv-python==4.10.0.84
+gymnasium==1.2.0
+shapely==2.1.1
+stable-baselines3[extra]==2.7.0
