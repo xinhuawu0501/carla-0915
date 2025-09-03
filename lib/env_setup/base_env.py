@@ -134,7 +134,6 @@ class CarBaseEnv():
             class_map[mask] = class_id
         return class_map
 
-       
     def debug_semantic(self, obs):
         """
         obs: dict containing 'image' key (C,H,W) float32 normalized [0,1]
@@ -150,7 +149,7 @@ class CarBaseEnv():
             cv_display(img_display)
             
             # Convert RGB to class IDs
-            class_map = rgb_to_class_id(img_display)
+            class_map = self.rgb_to_class_id(img_display)
             unique_classes = np.unique(class_map)         
             print("Detected semantic classes:", [k for k in unique_classes])
             
