@@ -5,6 +5,7 @@ from lib.scenarios.pedestrian_crossing import PedestrianCrossingScenario
 from lib.constants.camera import IMG_X, IMG_Y
 
 import time
+import random
 import math
 import gymnasium as gym
 from gymnasium import spaces
@@ -33,7 +34,7 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
     
     def _get_obs(self):
         try:
-            img = self.get_semantic_img()
+            img = self.get_semantic_img_from_queue()
             img_arr = process_semantic_img(img)
             transposed_img = np.transpose(img_arr, (2, 0, 1))  # to (3, 600, 800)
             
@@ -58,6 +59,15 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
                 "image": np.zeros((3, IMG_Y, IMG_X), dtype=np.float32),
                 "velocity": np.zeros((2,), dtype=np.float32),
             }
+        
+    def setup_scenario(self):
+        self.spawn_car()
+        scenario = PedestrianCrossingScenario(self.world, 1, speed=0.5)
+        routes = scenario.get_possible_car_routes()
+        target_route = random.choice(routes)
+
+        print(f'route {target_route}')
+        self.planner = CustomPlanner(self.car, route=target_route)
  
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -65,10 +75,7 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
         self.clear_image_queue()
         self.collision_data.clear()
 
-        self.spawn_car()
-        scenario = PedestrianCrossingScenario(self.world, 1)
-        # route = scenario.get_car_route()
-        # self.planner = CustomPlanner(self.car, route=route)
+        self.setup_scenario()
 
         return self._get_obs(), {}
     

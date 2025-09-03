@@ -70,7 +70,7 @@ class BaseScenario:
     
     def move_spectator_to_loc(self, location):
         spec_trans = location 
-        spec_trans.z += 20.0
+        spec_trans.z += 10.0
         rot = carla.Rotation(pitch=-90.0, yaw=0.0, roll=0.0)
         self.spectator.set_transform(carla.Transform(spec_trans, rot))
 

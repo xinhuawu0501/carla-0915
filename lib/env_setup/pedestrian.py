@@ -11,10 +11,9 @@ class Pedestrian:
         self.world_map = self.world.get_map()
 
         #if no specified spawn point and route, let walker wander randomly
-        self._spawn_walker(route=route, speed=speed)
-
-    def get_walker(self):
-        return self._spawn_walker
+        walker, controller = self._spawn_walker(route=route, speed=speed)
+        self.walker = walker
+        self.controller = controller
 
     def _spawn_walker(self, route, speed=DEFAULT_SPEED):
         try:
@@ -51,7 +50,7 @@ class Pedestrian:
 
         except Exception as e:
             print(f'_spawn_walker err {e}')
-            return None
+            return None, None
 
 
 

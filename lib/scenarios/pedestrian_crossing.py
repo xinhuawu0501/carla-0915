@@ -11,7 +11,7 @@ pick a random crosswalk and let walker(s) walk through the crosswalk; return a r
 '''
 class PedestrianCrossingScenario(BaseScenario):
     walker_list = []
-    def __init__(self, world, weather, num_of_walker= 1, speed=1.4):
+    def __init__(self, world, weather, num_of_walker= 1, speed=1.0):
         super().__init__(world=world)
         self.crosswalks = self.world_map.get_crosswalks()
         self.target_crosswalk = random.choice(self.crosswalks)
@@ -21,7 +21,7 @@ class PedestrianCrossingScenario(BaseScenario):
 
         self.spawn_walkers()
 
-    def get_car_route(self):
+    def get_possible_car_routes(self):
         return self._get_lanes_passing_crosswalk()
 
     def spawn_walkers(self):
@@ -31,9 +31,9 @@ class PedestrianCrossingScenario(BaseScenario):
 
             for i in range(self.num_of_walker):
                 ped = Pedestrian(self.world, route=route, speed=self.speed)
-                walker = ped.get_walker()
+                walker = ped.walker
                 #TODO: spawn walker every [] seconds?
-                time.sleep(5)
+                # time.sleep(5)
                 if walker:
                     self.walker_list.append(walker)
         except Exception as e:

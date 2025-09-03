@@ -66,7 +66,7 @@ class CarBaseEnv():
             self.colsen = self.world.spawn_actor(self.colsen_bp, carla.Transform(), attach_to=self.car)
             self.colsen.listen(lambda event: self.collision_data.append(event))
 
-        time.sleep(3.0)
+        time.sleep(2.0)
 
     def apply_control(self, control):
         self.car.apply_control(control)
@@ -108,19 +108,21 @@ class CarBaseEnv():
         except Exception as e:
             print(e)
 
-    def get_semantic_img(self):
+    def get_semantic_img_from_queue(self):
         try:
             image = self.semantic_img_queue.get(block=False)
             return image
         except queue.Empty:
             print('semantic empty')
 
-    def display_semantic(self, raw_image):
+    def display_semantic(self):
         try:
+            raw_image = self.get_semantic_img_from_queue()
             arr = process_semantic_img(raw_image)
             cv_display(arr)
         except Exception as e:
             print(e)
+
 
     # Helper: convert RGB image to class ID map
     def rgb_to_class_id(self, img_rgb):
