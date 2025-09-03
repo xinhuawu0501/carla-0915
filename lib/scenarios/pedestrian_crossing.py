@@ -17,7 +17,7 @@ class PedestrianCrossingScenario(BaseScenario):
         self.target_crosswalk = random.choice(self.crosswalks)
         self.num_of_walker = num_of_walker
         self.speed = speed
-        self.sidewalks = self._get_sidewalks()
+        self.sidewalks = self.get_sidewalks()
 
         self.spawn_walkers()
         car_route_options = self._get_lanes_passing_crosswalk()
@@ -41,7 +41,7 @@ class PedestrianCrossingScenario(BaseScenario):
 
         #walker entry should be on sidewalk
         cw_entry = random.choice(polygon)
-        spawn_point = self._get_closest_loc(cw_entry, self.crosswalks)
+        spawn_point = self.get_closest_loc(cw_entry, self.crosswalks)
         cw_exit = self._get_opposite_point_in_crosswalk(cw_entry, polygon)
         route.append(spawn_point)
         route.append(cw_entry)
@@ -76,44 +76,13 @@ class PedestrianCrossingScenario(BaseScenario):
                 break
         return exit
     
-    def _get_sidewalks(self, x_range=(-300, 300), y_range=(-300, 300), step=2.0):
-        sidewalk_wps = []
-        seen = set()
-
-        for x in range(int(x_range[0]), int(x_range[1]), int(step)):
-            for y in range(int(y_range[0]), int(y_range[1]), int(step)):
-                loc = carla.Location(x=float(x), y=float(y), z=0.0) # type: ignore
-                wp = self.world_map.get_waypoint(
-                    loc,
-                    project_to_road=False,
-                    lane_type=carla.LaneType.Sidewalk # type: ignore
-                )
-                if wp and (wp.road_id, wp.lane_id, round(wp.s, 1)) not in seen:
-                    sidewalk_wps.append(wp)
-                    seen.add((wp.road_id, wp.lane_id, round(wp.s, 1)))
-        
-        for s in sidewalk_wps:
-            print(s.lane_type)
-        return sidewalk_wps
-    
-    def _get_all_intersections(self, draw_str=False):
-        waypoints = self.world_map.generate_waypoints(distance=2.0)
-
-        self.intersections = [wp for wp in waypoints if wp.is_intersection]
-        return self.intersections
-    
-    def _get_all_crosswalk(self, draw_str=False) -> list[carla.Location]:
-        self.crosswalks = self.world_map.get_crosswalks()
-        return self.crosswalks
-    
     def _get_lanes_passing_crosswalk(self):
         lanes_to_crosswalk = []
         if not hasattr(self, 'intersections'):
-            self._get_all_intersections(draw_str=False)
+            self.get_all_intersections()
 
         if not hasattr(self, 'crosswalks'):
-            self._get_all_crosswalk(draw_str=False)
-
+            self.get_all_crosswalk()
 
         loc_in_cw = self._get_crosswalk_polygon(self.target_crosswalk)
 
@@ -129,13 +98,6 @@ class PedestrianCrossingScenario(BaseScenario):
 
         return lanes_to_crosswalk
 
-    def _get_closest_loc(self, target_loc, loc_list):
-        closest_loc = min(
-            loc_list,
-            key=lambda loc: loc.distance(target_loc)
-        )
-        
-        return closest_loc
 
     
     
