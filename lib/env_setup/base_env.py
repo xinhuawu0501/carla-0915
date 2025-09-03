@@ -234,29 +234,6 @@ class CarBaseEnv():
         return closest_spawn
     
     #=========== crosswalk utilities ===================================================#
-    def get_all_crosswalk(self, draw_str=False) -> list[carla.Location]:
-        self.crosswalks = self.world_map.get_crosswalks()
-        if draw_str:
-            self.draw_locations(self.crosswalks, displayed_str='cw')
-        return self.crosswalks
-    
-    def _get_crosswalk_polygon(self, crosswalk_point) -> list[carla.Location]:
-        try:
-            indexes = [index for index, loc in enumerate(self.crosswalks) if loc == crosswalk_point ]
-            succeed = len(indexes) > 1
-            if not succeed:
-                ind = 0
-                while ind < len(self.crosswalks):
-                    for i in range(ind + 1, len(self.crosswalks)):
-                        if self.crosswalks[i] == self.crosswalks[ind]:
-                            return self.crosswalks[ind:i]
-
-
-            return self.crosswalks[indexes[0]:indexes[1]]
-        except Exception as e:
-            print(e)
-            return []
-    
     def _get_closest_crosswalk_point_from_wp(self, crosswalk_pol, wp)->carla.Location:
         loc = wp.transform.location
         min_d = 1000000
@@ -270,16 +247,6 @@ class CarBaseEnv():
 
         return result
           
-    def _get_opposite_point_in_crosswalk(self, entry, polygon):
-        index = self.crosswalks.index(entry)
-        exit = -1
-        for i in range(index + 1, len(polygon)):
-            cw = polygon[i]
-            if cw == entry:
-                exit = cw
-                break
-        return exit
-    
     def get_all_intersections(self, draw_str=False):
         waypoints = self.generate_wp(2.0)
 
@@ -287,34 +254,7 @@ class CarBaseEnv():
         if draw_str:
             self.draw_wp(self.intersections)
         return self.intersections
-    
-    def get_lanes_passing_crosswalk(self, cw=None):
-        lanes_to_crosswalk = []
-        if not hasattr(self, 'intersections'):
-            self.get_all_intersections(draw_str=False)
-
-        if not hasattr(self, 'crosswalks'):
-            self.get_all_crosswalk(draw_str=False)
-
-        if not cw:
-            cw = random.choice(self.crosswalks)
-
-        loc_in_cw = self._get_crosswalk_polygon(cw)
-
-        crosswalk_polygon = Polygon([(pt.x, pt.y) for pt in loc_in_cw])
-        wps_in_crosswalk_polygon = [wp for wp in self.intersections if crosswalk_polygon.contains(Point(wp.transform.location.x, wp.transform.location.y))]
-
-        for i, wp in enumerate(wps_in_crosswalk_polygon):
-            prev = wp.previous(10.0)[0]
-            nxt = wp.next(10.0)[0]
-
-            route = [prev, wp, nxt]
-            lanes_to_crosswalk.append(route)
-
-        self.draw_wp(lanes_to_crosswalk[0], strg=f'lan')
-
-        return lanes_to_crosswalk
-
+ 
     def change_weather(self, rain=0.0, cloud=0.0):
         weather = carla.WeatherParameters(
         cloudiness=cloud,        # 0-100

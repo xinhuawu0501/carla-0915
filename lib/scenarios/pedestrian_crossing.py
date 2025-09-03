@@ -39,8 +39,12 @@ class PedestrianCrossingScenario:
     def get_walker_route(self):
         route = []
         polygon = self._get_crosswalk_polygon(self.target_crosswalk)
+
+        #walker entry should be on sidewalk
         cw_entry = random.choice(polygon)
+        spawn_point = self._get_closest_loc(cw_entry, self.crosswalks)
         cw_exit = self._get_opposite_point_in_crosswalk(cw_entry, polygon)
+        route.append(spawn_point)
         route.append(cw_entry)
         route.append(cw_exit)
         #TODO:  after crossing, keep walking on sidewalk randomly
@@ -126,7 +130,14 @@ class PedestrianCrossingScenario:
 
         return lanes_to_crosswalk
 
-    
+    def _get_closest_loc(self, target_loc, loc_list):
+        closest_loc = min(
+            loc_list,
+            key=lambda loc: loc.distance(target_loc)
+        )
+        
+        return closest_loc
+
     
     
 
