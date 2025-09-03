@@ -123,7 +123,7 @@ class CarBaseEnv():
             print(e)
 
     # Helper: convert RGB image to class ID map
-    def rgb_to_class_id(img_rgb):
+    def rgb_to_class_id(self, img_rgb):
         """
         img_rgb: HWC uint8
         returns: HxW int32 with class IDs

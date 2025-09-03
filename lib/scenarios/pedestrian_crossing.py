@@ -3,7 +3,7 @@ from lib.scenarios.base_scenario import BaseScenario
 import carla
 import random
 import time
-from shapely.geometry import Polygon, Point
+from shapely import Polygon, Point
 
 
 '''
@@ -11,8 +11,8 @@ pick a random crosswalk and let walker(s) walk through the crosswalk; return a r
 '''
 class PedestrianCrossingScenario(BaseScenario):
     walker_list = []
-    def __init__(self, client, weather, num_of_walker= 1, speed=1.4):
-        super().__init__(client=client, weather=weather)
+    def __init__(self, world, weather, num_of_walker= 1, speed=1.4):
+        super().__init__(world=world)
         self.crosswalks = self.world_map.get_crosswalks()
         self.target_crosswalk = random.choice(self.crosswalks)
         self.num_of_walker = num_of_walker
@@ -20,9 +20,9 @@ class PedestrianCrossingScenario(BaseScenario):
         self.sidewalks = self.get_sidewalks()
 
         self.spawn_walkers()
-        car_route_options = self._get_lanes_passing_crosswalk()
-        return car_route_options
 
+    def get_car_route(self):
+        return self._get_lanes_passing_crosswalk()
 
     def spawn_walkers(self):
         try:
@@ -30,7 +30,8 @@ class PedestrianCrossingScenario(BaseScenario):
             self.move_spectator_to_loc(route[0])
 
             for i in range(self.num_of_walker):
-                walker = Pedestrian(self.client, route=route, speed=self.speed)
+                ped = Pedestrian(self.world, route=route, speed=self.speed)
+                walker = ped.get_walker()
                 #TODO: spawn walker every [] seconds?
                 time.sleep(5)
                 if walker:
@@ -44,42 +45,47 @@ class PedestrianCrossingScenario(BaseScenario):
         polygon = self._get_crosswalk_polygon(self.target_crosswalk)
 
         #walker entry should be on sidewalk
-        cw_entry = random.choice(polygon)
-        spawn_point = self.get_closest_loc(cw_entry, self.crosswalks)
-        cw_exit = self._get_opposite_point_in_crosswalk(cw_entry, polygon)
+        cw_entry = polygon[0]
+        sidewalk_location = [wp.transform.location for wp in self.sidewalks]
+        spawn_point = self.get_closest_loc(cw_entry, sidewalk_location)
+        cw_exit = polygon[-2]
         route.append(spawn_point)
         route.append(cw_entry)
         route.append(cw_exit)
         #TODO:  after crossing, keep walking on sidewalk randomly
         return route
+    
+    def draw_locations(self, locations: list[carla.Location], displayed_str=''):
+        for loc in locations:
+            self.world.debug.draw_string(
+                loc + carla.Location(z=0.2),
+                displayed_str + str(loc),
+                color=carla.Color(255, 0, 0),
+                life_time=100.0
+            )
+
+    def is_same_location(self, a, b, tol=0.05):
+        return (abs(a.x - b.x) < tol and
+                abs(a.y - b.y) < tol and
+                abs(a.z - b.z) < tol)
+    
+    def __print_loc(self, loc):
+        print(f'Location: {loc.x} {loc.y} {loc.z}')
 
     def _get_crosswalk_polygon(self, crosswalk_point) -> list[carla.Location]:
         try:
-            indexes = [index for index, loc in enumerate(self.crosswalks) if loc == crosswalk_point ]
-            succeed = len(indexes) > 1
-            if not succeed:
-                ind = 0
-                while ind < len(self.crosswalks):
-                    for i in range(ind + 1, len(self.crosswalks)):
-                        if self.crosswalks[i] == self.crosswalks[ind]:
-                            return self.crosswalks[ind:i]
+            self.draw_locations(self.crosswalks)
+            self.move_spectator_to_loc(crosswalk_point)
 
-
-            return self.crosswalks[indexes[0]:indexes[1]]
+            polygons = self.get_all_crosswalk_polygons()
+            target_group = list(filter(lambda group: crosswalk_point in group, polygons))[0]
+            return target_group
+            
+            
         except Exception as e:
-            print(e)
+            print(f'_get_crosswalk_polygon err: {e}')
             return []
         
-    def _get_opposite_point_in_crosswalk(self, entry, polygon):
-        index = self.crosswalks.index(entry)
-        exit = -1
-        for i in range(index + 1, len(polygon)):
-            cw = polygon[i]
-            if cw == entry:
-                exit = cw
-                break
-        return exit
-    
     def _get_lanes_passing_crosswalk(self):
         lanes_to_crosswalk = []
         try:
@@ -101,7 +107,7 @@ class PedestrianCrossingScenario(BaseScenario):
                 route = [prev, wp, nxt]
                 lanes_to_crosswalk.append(route)
         except Exception as e:
-            print(e)
+            print(f'_get_lanes_passing_crosswalk error: {e}')
         
         return lanes_to_crosswalk
 

@@ -4,29 +4,28 @@ import carla
 DEFAULT_SPEED=1.4
 
 class Pedestrian:
-    def __init__(self, client, route, speed=DEFAULT_SPEED) -> None:
-        self.client = client
-        self.world = self.client.world
+    def __init__(self, world, route, speed=DEFAULT_SPEED) -> None:
+        self.world = world
         self.bp = self.world.get_blueprint_library()
         self.walker_bps = self.bp.filter("walker.pedestrian.*")
         self.world_map = self.world.get_map()
 
         #if no specified spawn point and route, let walker wander randomly
-        self.spawn_walker(route=route, speed=speed)
-        if self.walker:
-            return self.walker
-        else:
-            return None 
+        self._spawn_walker(route=route, speed=speed)
 
-    def spawn_walker(self, route, speed=DEFAULT_SPEED):
+    def get_walker(self):
+        return self._spawn_walker
+
+    def _spawn_walker(self, route, speed=DEFAULT_SPEED):
         try:
             bp = random.choice(self.walker_bps)
             if bp.has_attribute("is_invincible"):
                 bp.set_attribute("is_invincible", "false")
     
-            sp_wp = route[0]
-            spawn_transform = sp_wp.transform
-            spawn_transform.location.z += 0.5  # lift to avoid collision
+            sp_loc = route[0]
+            # spawn_transform = sp_wp.transform
+            sp_loc.z = 0.5  # lift to avoid collision
+            spawn_transform = carla.Transform(sp_loc, carla.Rotation())
         
             self.walker = self.world.try_spawn_actor(bp, spawn_transform)
 
@@ -51,7 +50,7 @@ class Pedestrian:
             return self.walker, self.controller
 
         except Exception as e:
-            print(e)
+            print(f'_spawn_walker err {e}')
             return None
 
 

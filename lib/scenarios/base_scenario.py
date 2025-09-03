@@ -10,15 +10,12 @@ DEFAULT_WEATHER=carla.WeatherParameters(
         )
 
 class BaseScenario:
-    def __init__(self, client, weather=DEFAULT_WEATHER):
-        self.client = client
-        self.world = client.world
+    def __init__(self, world):
+        self.world = world
         self.world_map = self.world.get_map()
         self.spectator = self.world.get_spectator()
-
-        self.set_weather(weather=weather)
     
-    def set_weather(self, weather):
+    def set_weather(self, weather=DEFAULT_WEATHER):
         try:
             self.world.set_weather(weather)
         except Exception as e:
@@ -40,9 +37,7 @@ class BaseScenario:
                 if wp and (wp.road_id, wp.lane_id, round(wp.s, 1)) not in seen:
                     sidewalk_wps.append(wp)
                     seen.add((wp.road_id, wp.lane_id, round(wp.s, 1)))
-        
-        for s in sidewalk_wps:
-            print(s.lane_type)
+    
         return sidewalk_wps
     
     def get_all_intersections(self):
@@ -54,6 +49,16 @@ class BaseScenario:
     def get_all_crosswalk(self) -> list[carla.Location]:
         self.crosswalks = self.world_map.get_crosswalks()
         return self.crosswalks
+    
+    def get_all_crosswalk_polygons(self):
+        polygons = []
+        
+        for i in range(0, len(self.crosswalks), 5):
+            cw_group = self.crosswalks[i:i + 5]
+            polygons.append(cw_group)
+
+        return polygons
+
     
     def get_closest_loc(self, target_loc, loc_list):
         closest_loc = min(
