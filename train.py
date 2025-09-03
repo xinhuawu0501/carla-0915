@@ -2,7 +2,7 @@ import os
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecTransposeImage
 from stable_baselines3.common.callbacks import CheckpointCallback
-from main import AgentWithSensor  # Make sure CarEnv returns semantic camera images as observations
+from lib.agents.sensor.AgentWithSensor import AgentWithSensor  # Make sure CarEnv returns semantic camera images as observations
 
 # -----------------------------
 # Paths

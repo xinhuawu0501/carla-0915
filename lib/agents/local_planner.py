@@ -1,4 +1,5 @@
 from lib.PythonAPI.carla.agents.navigation.local_planner import LocalPlanner
+import carla
 
 class CustomPlanner(LocalPlanner):
     def __init__(self, vehicle, map_inst=None, route=None):
@@ -18,5 +19,5 @@ class CustomPlanner(LocalPlanner):
         control = super().run_step(debug=debug)
         return control
     
-    def set_route(self, route: carla.WayPoint[]): # type: ignore
+    def set_route(self, route: [carla.Waypoint]): # type: ignore
         self.set_global_plan(route)

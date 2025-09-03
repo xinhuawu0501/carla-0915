@@ -1,4 +1,4 @@
-from agents.local_planner import CustomPlanner
+from lib.agents.local_planner import CustomPlanner
 from lib.env_setup.base_env import CarBaseEnv
 from lib.util.image_processing import process_semantic_img
 from lib.scenarios.pedestrian_crossing import PedestrianCrossingScenario
@@ -11,8 +11,7 @@ from gymnasium import spaces
 import carla
 import numpy as np
 import queue
-import cv2
-import random
+
 
 
 class AgentWithSensor(CarBaseEnv, gym.Env):
@@ -49,7 +48,7 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
                 "velocity": np.array([vx, vy], dtype=np.float32),
             }
 
-            self.debug_semantic(obs)
+            # self.debug_semantic(obs)
 
             return obs
 
@@ -67,8 +66,9 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
         self.collision_data.clear()
 
         self.spawn_car()
-        route = PedestrianCrossingScenario(self.client, 1)
-        self.planner = CustomPlanner(self.car, route=route)
+        scenario = PedestrianCrossingScenario(self.world, 1)
+        # route = scenario.get_car_route()
+        # self.planner = CustomPlanner(self.car, route=route)
 
         return self._get_obs(), {}
     
