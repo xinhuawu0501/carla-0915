@@ -25,14 +25,18 @@ class PedestrianCrossingScenario(BaseScenario):
 
 
     def spawn_walkers(self):
-        route = self.get_walker_route()
+        try:
+            route = self.get_walker_route()
+            self.move_spectator_to_loc(route[0])
 
-        for i in range(self.num_of_walker):
-            walker = Pedestrian(self.client, route=route, speed=self.speed)
-            #TODO: spawn walker every [] seconds?
-            time.sleep(5)
-            if walker:
-                self.walker_list.append(walker)
+            for i in range(self.num_of_walker):
+                walker = Pedestrian(self.client, route=route, speed=self.speed)
+                #TODO: spawn walker every [] seconds?
+                time.sleep(5)
+                if walker:
+                    self.walker_list.append(walker)
+        except Exception as e:
+            print(f'spawn walker failed in pedestrian crossing scenario: {e}')
       
 
     def get_walker_route(self):
@@ -78,24 +82,27 @@ class PedestrianCrossingScenario(BaseScenario):
     
     def _get_lanes_passing_crosswalk(self):
         lanes_to_crosswalk = []
-        if not hasattr(self, 'intersections'):
-            self.get_all_intersections()
+        try:
+            if not hasattr(self, 'intersections'):
+                self.get_all_intersections()
 
-        if not hasattr(self, 'crosswalks'):
-            self.get_all_crosswalk()
+            if not hasattr(self, 'crosswalks'):
+                self.get_all_crosswalk()
 
-        loc_in_cw = self._get_crosswalk_polygon(self.target_crosswalk)
+            loc_in_cw = self._get_crosswalk_polygon(self.target_crosswalk)
 
-        crosswalk_polygon = Polygon([(pt.x, pt.y) for pt in loc_in_cw])
-        wps_in_crosswalk_polygon = [wp for wp in self.intersections if crosswalk_polygon.contains(Point(wp.transform.location.x, wp.transform.location.y))]
+            crosswalk_polygon = Polygon([(pt.x, pt.y) for pt in loc_in_cw])
+            wps_in_crosswalk_polygon = [wp for wp in self.intersections if crosswalk_polygon.contains(Point(wp.transform.location.x, wp.transform.location.y))]
 
-        for i, wp in enumerate(wps_in_crosswalk_polygon):
-            prev = wp.previous(10.0)[0]
-            nxt = wp.next(10.0)[0]
+            for i, wp in enumerate(wps_in_crosswalk_polygon):
+                prev = wp.previous(10.0)[0]
+                nxt = wp.next(10.0)[0]
 
-            route = [prev, wp, nxt]
-            lanes_to_crosswalk.append(route)
-
+                route = [prev, wp, nxt]
+                lanes_to_crosswalk.append(route)
+        except Exception as e:
+            print(e)
+        
         return lanes_to_crosswalk
 
 

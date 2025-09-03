@@ -1,8 +1,8 @@
 from lib.env_setup.base_env import CarBaseEnv
 from lib.PythonAPI.carla.agents.navigation.local_planner import LocalPlanner
-from lib.util.image_processing import process_rgb_img, cv_display, process_semantic_img
+from lib.util.image_processing import process_semantic_img
 from lib.scenarios.pedestrian_crossing import PedestrianCrossingScenario
-from lib.constants.camera import IMG_X, IMG_Y, CITYSCAPES_PALETTE, CITYSCAPES_LABEL
+from lib.constants.camera import IMG_X, IMG_Y
 
 import time
 import math
@@ -35,19 +35,6 @@ class CustomPlanner(LocalPlanner):
     
     def set_route(self, route: carla.WayPoint[]): # type: ignore
         self.set_global_plan(route)
-
-
-# Helper: convert RGB image to class ID map
-def rgb_to_class_id(img_rgb):
-    """
-    img_rgb: HWC uint8
-    returns: HxW int32 with class IDs
-    """
-    class_map = np.zeros((img_rgb.shape[0], img_rgb.shape[1]), dtype=np.int32)
-    for class_id, color in CITYSCAPES_PALETTE.items():
-        mask = np.all(img_rgb == color, axis=2)
-        class_map[mask] = class_id
-    return class_map
 
 class AgentWithSensor(CarBaseEnv, gym.Env):
     def __init__(self):
@@ -91,37 +78,7 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
                 "image": np.zeros((3, IMG_Y, IMG_X), dtype=np.float32),
                 "velocity": np.zeros((2,), dtype=np.float32),
             }
-    
-    def debug_semantic(self, obs):
-        """
-        obs: dict containing 'image' key (C,H,W) float32 normalized [0,1]
-        """
-        try:
-            semantic_img = obs['image']  # (C,H,W), normalized
-            # Convert to HWC uint8 for display
-            img_display = np.transpose(semantic_img, (1, 2, 0))  # HWC
-            img_display = (img_display * 255).astype(np.uint8)
-            img_display = cv2.cvtColor(img_display, cv2.COLOR_RGB2BGR)
-            
-            # Display the semantic image
-            cv_display(img_display)
-            
-            # Convert RGB to class IDs
-            class_map = rgb_to_class_id(img_display)
-            unique_classes = np.unique(class_map)         
-            print("Detected semantic classes:", [k for k in unique_classes])
-            
-            # Detect pedestrian presence
-            if 4 in unique_classes:
-                print("Pedestrian detected! Switching to RL control.")
-                self.pedestrian_detected = True
-            else:
-                self.pedestrian_detected = False
-
-        except Exception as e:
-            print("debug_semantic error:", e)
-
-    
+ 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.cleanup()

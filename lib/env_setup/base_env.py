@@ -4,9 +4,11 @@ import random
 import math
 import numpy as np
 import queue
+from lib.constants.camera import CITYSCAPES_PALETTE
 from lib.util.image_processing import cv_display, process_rgb_img, process_semantic_img
 import cv2
 from shapely.geometry import Polygon, Point
+
 
 class CarBaseEnv():
     is_sync = False
@@ -119,6 +121,50 @@ class CarBaseEnv():
             cv_display(arr)
         except Exception as e:
             print(e)
+
+    # Helper: convert RGB image to class ID map
+    def rgb_to_class_id(img_rgb):
+        """
+        img_rgb: HWC uint8
+        returns: HxW int32 with class IDs
+        """
+        class_map = np.zeros((img_rgb.shape[0], img_rgb.shape[1]), dtype=np.int32)
+        for class_id, color in CITYSCAPES_PALETTE.items():
+            mask = np.all(img_rgb == color, axis=2)
+            class_map[mask] = class_id
+        return class_map
+
+       
+    def debug_semantic(self, obs):
+        """
+        obs: dict containing 'image' key (C,H,W) float32 normalized [0,1]
+        """
+        try:
+            semantic_img = obs['image']  # (C,H,W), normalized
+            # Convert to HWC uint8 for display
+            img_display = np.transpose(semantic_img, (1, 2, 0))  # HWC
+            img_display = (img_display * 255).astype(np.uint8)
+            img_display = cv2.cvtColor(img_display, cv2.COLOR_RGB2BGR)
+            
+            # Display the semantic image
+            cv_display(img_display)
+            
+            # Convert RGB to class IDs
+            class_map = rgb_to_class_id(img_display)
+            unique_classes = np.unique(class_map)         
+            print("Detected semantic classes:", [k for k in unique_classes])
+            
+            # Detect pedestrian presence
+            if 4 in unique_classes:
+                print("Pedestrian detected! Switching to RL control.")
+                self.pedestrian_detected = True
+            else:
+                self.pedestrian_detected = False
+
+        except Exception as e:
+            print("debug_semantic error:", e)
+
+    
 
 
     def set_sync(self):

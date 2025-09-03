@@ -14,8 +14,16 @@ class BaseScenario:
         self.client = client
         self.world = client.world
         self.world_map = self.world.get_map()
+        self.spectator = self.world.get_spectator()
 
-        self.world.set_weather(weather)
+        self.set_weather(weather=weather)
+    
+    def set_weather(self, weather):
+        try:
+            self.world.set_weather(weather)
+        except Exception as e:
+            print(e)
+ 
 
     def get_sidewalks(self, x_range=(-300, 300), y_range=(-300, 300), step=2.0):
         sidewalk_wps = []
@@ -54,4 +62,10 @@ class BaseScenario:
         )
         
         return closest_loc
+    
+    def move_spectator_to_loc(self, location):
+        spec_trans = location 
+        spec_trans.z += 20.0
+        rot = carla.Rotation(pitch=-90.0, yaw=0.0, roll=0.0)
+        self.spectator.set_transform(carla.Transform(spec_trans, rot))
 
