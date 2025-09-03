@@ -1,4 +1,5 @@
 from lib.env_setup.pedestrian import Pedestrian
+from lib.scenarios.base_scenario import BaseScenario
 import carla
 import random
 import time
@@ -8,12 +9,10 @@ from shapely.geometry import Polygon, Point
 '''
 pick a random crosswalk and let walker(s) walk through the crosswalk; return a route for ego vehicle to follow
 '''
-class PedestrianCrossingScenario:
+class PedestrianCrossingScenario(BaseScenario):
     walker_list = []
-    def __init__(self, client, num_of_walker= 1, speed=1.4):
-        self.client = client
-        self.world = self.world.client
-        self.world_map = self.world.get_map()
+    def __init__(self, client, weather, num_of_walker= 1, speed=1.4):
+        super().__init__(client=client, weather=weather)
         self.crosswalks = self.world_map.get_crosswalks()
         self.target_crosswalk = random.choice(self.crosswalks)
         self.num_of_walker = num_of_walker
