@@ -106,7 +106,7 @@ class PedestrianCrossingScenario(BaseScenario):
                 nxt = wp.next(10.0)[0]
 
                 route = [prev, wp, nxt]
-                yaw_diff = get_yaw_diff(prev, nxt)
+                yaw_diff = get_yaw_diff(prev.transform, nxt.transform)
                 if yaw_diff > 30:
                     lanes_to_crosswalk['turning'].append(route)
                 else:

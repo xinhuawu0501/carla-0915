@@ -30,8 +30,7 @@ class CarBaseEnv():
         self.vehicle_bps = self.world_bp.filter('vehicle.*.*')
         self.vehicle_bp = self.vehicle_bps[0]
 
-        if not sp:
-            self.car_sp = random.choice(self.spawn_points)
+        self.car_sp = sp if sp else random.choice(self.spawn_points)
         
         if sensor_options is None:
             sensor_options={'semantic': True, 'rgb': False, 'colsen': True}
