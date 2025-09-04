@@ -29,9 +29,6 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
        
        self.action_space = spaces.Box(low=np.array([-1.0, 0.0, 0.0]), high=np.array([1.0, 1.0, 1.0]), dtype=np.float64)
 
-    def planner_control(self):
-        return self.planner.run_step(debug=True)
-    
     def _get_obs(self):
         try:
             img = self.get_semantic_img_from_queue()
@@ -67,8 +64,8 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
         turning_routes = routes['turning']
         target_route = random.choice(turning_routes)
 
-        print(f'route {target_route}')
-        self.planner = CustomPlanner(self.car, route=target_route)
+        self.draw_waypoints(target_route, 'target')
+        self.planner = CustomPlanner(self.car, route=target_route, target_speed=5.0)
  
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -78,7 +75,12 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
 
         self.setup_scenario()
 
+        self.world.tick()
         return self._get_obs(), {}
+    
+    def get_planner_control(self):
+        return self.planner.run_step(debug=True)
+    
     
     def step(self, action):
         rl_control = carla.VehicleControl(
@@ -87,7 +89,7 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
             brake=float(action[2])
         )
 
-        planner_control = self.planner.run_step(debug=False)
+        planner_control = self.get_planner_control()
 
         # Blend RL + planner
         alpha = 0.5  # 0 = planner only, 1 = RL only

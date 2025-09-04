@@ -1,4 +1,5 @@
 from agents.local_planner import CustomPlanner
+from env_setup.v2v_channel import V2PChannel
 from lib.env_setup.base_env import CarBaseEnv
 from lib.scenarios.pedestrian_crossing import PedestrianCrossingScenario
 
@@ -11,60 +12,52 @@ import numpy as np
 import random
 
 
-class AgentWithV2V(CarBaseEnv, gym.Env):
+class V2PEnv(CarBaseEnv, gym.Env):
+    """
+    Ego vehicle receives V2P messages from pedestrian.
+    Obs: [ego_speed, ped_rx, ped_ry, ped_speed, v2p_valid]
+    Action: [throttle (-1..1), steer (-1..1)]
+    """
+    metadata = {"render_modes": []}
+
     def __init__(self):
-       super().__init__()
+        super().__init__()
+        self.set_sync()
 
-    #    self.set_sync()
-       #!!! TODO: add local planner control to observation space
-       self.observation_space = spaces.Dict({
-            "velocity": spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32),  # vx, vy
-        })
-       
-       self.action_space = spaces.Box(low=np.array([-1.0, 0.0, 0.0]), high=np.array([1.0, 1.0, 1.0]), dtype=np.float64)
+        self.action_space = spaces.Box(low=np.array([-1.0, -1.0]), high=np.array([1.0,1.0]), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(5,), dtype=np.float32)
 
-    def planner_control(self):
-        return self.planner.run_step(debug=True)
-    
-    def _get_obs(self):
-        try:
-            # Get velocity
-            velocity = self.car.get_velocity()
-            vx = np.clip(velocity.x / 50.0, -1.0, 1.0)
-            vy = np.clip(velocity.y / 50.0, -1.0, 1.0)
+        # V2P channel
+        self.radio = V2PChannel(latency_steps=2, drop_prob=0.1, range_m=50.0)
 
-            obs = {
-                "velocity": np.array([vx, vy], dtype=np.float32),
-            }
-
-            return obs
-
-        except Exception as e:
-            print(e)
-            return {
-                "velocity": np.zeros((2,), dtype=np.float32),
-            }
- 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.cleanup()
+        self.clear_image_queue()
         self.collision_data.clear()
 
         self.spawn_car()
-        route = PedestrianCrossingScenario(self.client, 1)
-        self.planner = CustomPlanner(self.car, route=route)
+        self.planner = CustomPlanner(self.car, target_speed=5.0)
+
+        # TODO: add scenario
+
+        for _ in range(5):
+            self.world.tick()
+            self.radio.tick()
 
         return self._get_obs(), {}
     
+    def get_planner_control(self):
+        return self.planner.run_step(debug=True)
+    
+
     def step(self, action):
         rl_control = carla.VehicleControl(
             steer=float(action[0]),
             throttle=float(action[1]),
             brake=float(action[2])
         )
-
-        planner_control = self.planner.run_step(debug=False)
-
+        planner_control = self.get_planner_control()
         # Blend RL + planner
         alpha = 0.5  # 0 = planner only, 1 = RL only
         final_control = carla.VehicleControl(
@@ -74,29 +67,45 @@ class AgentWithV2V(CarBaseEnv, gym.Env):
         )
 
         self.apply_control(planner_control)
+
+        # Pedestrian broadcasts V2P
+        ped_tf = self.ped.get_transform()
+        ped_vel = self.ped.get_velocity()
+        ped_speed = math.hypot(ped_vel.x, ped_vel.y)
+        self.radio.broadcast(self.ped.id, {"x": ped_tf.location.x,
+                                           "y": ped_tf.location.y,
+                                           "speed": ped_speed})
+
+        # Tick sim
         self.world.tick()
-
-        v = self.car.get_velocity()
-        speed = math.sqrt(v.x**2 + v.y**2 + v.z**2) * 3.6
-
-        done = False
-        reward = 0
-
-        if self.collision_data:
-            reward = 100
-            done = True
-
+        self.radio.tick()
 
         obs = self._get_obs()
-        # print(f'step {self.step_count} obs: {obs}')
+        if self.collision_data:
+            reward = -100
+            done = True
+            
+        truncated = False
+        return obs, reward, done, truncated, {}
 
-        return obs, reward, done, False, {}
-    
-    
-    
+    def _get_obs(self):
+        ego_tf = self.ego.get_transform()
+        ego_vel = self.ego.get_velocity()
+        ego_speed = math.hypot(ego_vel.x, ego_vel.y)
+
+        msgs = self.radio.receive((ego_tf.location.x, ego_tf.location.y))
+        if msgs:
+            _, m = msgs[-1]
+            rx, ry = m["rx"], m["ry"]
+            speed = m["speed"]
+            valid = 1.0
+        else:
+            rx, ry, speed, valid = 0.0, 0.0, 0.0, 0.0
+
+        return np.array([ego_speed, rx, ry, speed, valid], dtype=np.float32)
+
+
     def close(self):
         self.cleanup()
-
-        print(f'cleaned up')
  
 

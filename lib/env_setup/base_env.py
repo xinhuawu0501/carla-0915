@@ -235,7 +235,7 @@ class CarBaseEnv():
         return self.wps
    
 
-    def draw_wp(self, wps, strg=''):
+    def draw_waypoints(self, wps, strg=''):
         for wp in wps:
             loc = wp.transform.location + carla.Location(z=0.2)
             self.world.debug.draw_string(
@@ -284,7 +284,7 @@ class CarBaseEnv():
 
         self.intersections = [wp for wp in waypoints if wp.is_intersection]
         if draw_str:
-            self.draw_wp(self.intersections)
+            self.draw_waypoints(self.intersections)
         return self.intersections
  
     def change_weather(self, rain=0.0, cloud=0.0):

@@ -1,4 +1,4 @@
-from lib.agents.sensor.AgentWithSensor import AgentWithSensor
+from agents.sensor.AgentWithSensor import AgentWithSensor
 
 def init():
     env = AgentWithSensor()
@@ -6,15 +6,12 @@ def init():
     client = env.client
    
     try:
-        env.setup_scenario()
+        env.reset()
         car = env.car
-        # env.move_spectator_to_loc(car.get_transform().location)
 
         while True:
-            control = env.planner.run_step(debug=False)
+            control = env.get_planner_control()
             env.car.apply_control(control)
-            env.display_semantic()
-
             if env.is_sync:
                 env.world.tick()
             else:

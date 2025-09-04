@@ -3,3 +3,4 @@ playground/
 **/__pycache__/
 carla_checkpoints/
 *.pyc
+.vscode/

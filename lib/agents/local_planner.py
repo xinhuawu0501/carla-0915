@@ -2,9 +2,9 @@ from lib.PythonAPI.carla.agents.navigation.local_planner import LocalPlanner
 import carla
 
 class CustomPlanner(LocalPlanner):
-    def __init__(self, vehicle, map_inst=None, route=None):
+    def __init__(self, vehicle, map_inst=None, route=None, target_speed = 10.0):
         opt_dict = {
-            'target_speed': 10.0,     # km/h
+            'target_speed': target_speed,     # km/h
             'sampling_resolution': 2.0
         }
         super().__init__(vehicle, opt_dict, map_inst)
