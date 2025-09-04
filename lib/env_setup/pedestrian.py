@@ -1,10 +1,10 @@
 import random
 import carla
 
-DEFAULT_SPEED=0.8
+DEFAULT_SPEED=1.0
 
 class Pedestrian:
-    def __init__(self, world, route, speed=DEFAULT_SPEED) -> None:
+    def __init__(self, world, route=[], speed=DEFAULT_SPEED) -> None:
         self.world = world
         self.bp = self.world.get_blueprint_library()
         self.walker_bps = self.bp.filter("walker.pedestrian.*")
@@ -15,17 +15,21 @@ class Pedestrian:
         self.walker = walker
         self.controller = controller
 
-    def _spawn_walker(self, route, speed=DEFAULT_SPEED):
+    def _spawn_walker(self, route=[], speed=DEFAULT_SPEED):
         try:
             bp = random.choice(self.walker_bps)
             if bp.has_attribute("is_invincible"):
                 bp.set_attribute("is_invincible", "false")
-    
-            sp_loc = route[0]
-            # spawn_transform = sp_wp.transform
+
+            if len(route) < 1:
+                self.spawn_points = self.world_map.get_spawn_points()
+                sp = random.choice(self.spawn_points)
+                sp_loc = sp.location
+            else:
+                sp_loc = route[0]
+
             sp_loc.z = 0.5  # lift to avoid collision
             spawn_transform = carla.Transform(sp_loc, carla.Rotation())
-        
             self.walker = self.world.try_spawn_actor(bp, spawn_transform)
 
             self.world.tick()
@@ -44,6 +48,8 @@ class Pedestrian:
             else:
                 for location in route:
                     self.controller.go_to_location(location)
+                    #TODO: when walker reach des, stop
+                
                 print(f"✅ Walker spawned at {spawn_transform.location}, moving to {route[-1]}")
 
             return self.walker, self.controller

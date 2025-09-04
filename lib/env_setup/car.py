@@ -75,12 +75,17 @@ class Car:
             if sensor_options.get(Sensor.COLSEN):
                 self.colsen_bp = self.world_bp.find('sensor.other.collision')
                 self.colsen = self.world.spawn_actor(self.colsen_bp, carla.Transform(), attach_to=self.car)
-                self.colsen.listen(lambda event: self.collision_data.append(event))
+                self.colsen.listen(lambda event: self.on_collision(event))
                 self.sensors.append(self.colsen)
 
         except Exception as e:
             print(f'spawn car failed {e}')
+    
+    def on_collision(self, event):
+        self.collision_data.append(event)
 
+        if event.other_actor.type_id.startswith('walker'):
+            print(f'collided with {event.other_actor.type_id} {event.other_actor.id}')
 
     def get_raw_img_from_q(self, img_type = Sensor.SEMANTIC):
         try:
@@ -93,11 +98,9 @@ class Car:
         except queue.Empty:
             print(f'{img_type} queue empty')
 
-    def display_img(self, raw, img_type = Sensor.SEMANTIC):
+    def display_img(self, img_type = Sensor.SEMANTIC):
         try:
-            if raw is None:
-                print(f"No image to display for {img_type}")
-                return
+            raw = self.get_raw_img_from_q(img_type=img_type)
             processed = None
             if img_type == Sensor.SEMANTIC:
                 processed = process_semantic_img(raw)
@@ -183,11 +186,5 @@ class Car:
     
     def cleanup(self):
         self.clear_all_q()
+        print(f'{len(self.collision_data)} collisions happened')
         self.collision_data.clear()
-
-        for sensor in self.sensors:
-            sensor.stop()
-            sensor.destroy()
-        
-        if self.car:
-            self.car.destroy()

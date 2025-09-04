@@ -1,5 +1,5 @@
 from lib.env_setup.pedestrian import Pedestrian
-from lib.scenarios.base_scenario import BaseScenario
+from lib.scenarios.base_scenario import DEFAULT_WEATHER, BaseScenario
 from lib.util.transform import get_yaw_diff
 import carla
 import random
@@ -12,7 +12,9 @@ pick a random crosswalk and let walker(s) walk through the crosswalk; return a r
 '''
 class PedestrianCrossingScenario(BaseScenario):
     walker_list = []
-    def __init__(self, world, weather, num_of_walker= 1, speed=1.0):
+    npc_walkers = []
+
+    def __init__(self, world, weather=DEFAULT_WEATHER, num_of_walker= 1, speed=1.0):
         super().__init__(world=world)
         self.crosswalks = self.world_map.get_crosswalks()
         self.target_crosswalk = random.choice(self.crosswalks)
@@ -20,10 +22,22 @@ class PedestrianCrossingScenario(BaseScenario):
         self.speed = speed
         self.sidewalks = self.get_sidewalks()
 
-        self.spawn_walkers()
+        # self.spawn_walkers()
+        self.spawn_npc_walkers()
 
     def get_possible_car_routes(self):
         return self._get_lanes_passing_crosswalk()
+    
+    def spawn_npc_walkers(self):
+        for i in range(self.num_of_walker):
+            ped = Pedestrian(self.world)
+            walker = ped.walker
+            if walker:
+                self.npc_walkers.append(walker)
+        
+        print(f'spawned {len(self.npc_walkers)} npc walkers')
+
+        self.world.set_pedestrians_cross_factor(1.0)
 
     def spawn_walkers(self):
         try:
@@ -47,20 +61,26 @@ class PedestrianCrossingScenario(BaseScenario):
 
         #walker entry should be on sidewalk
         cw_entry = polygon[0]
-        sidewalk_location = [wp.transform.location for wp in self.sidewalks]
-        spawn_point = self.get_closest_loc(cw_entry, sidewalk_location)
-        cw_exit = polygon[-2]
+        sidewalk_locations = [wp.transform.location for wp in self.sidewalks]
+        spawn_point = self.get_closest_loc(cw_entry, sidewalk_locations)
+        cw_exit = polygon[2]
+        sidewalk_exit = self.get_closest_loc(cw_exit, sidewalk_locations)
+
         route.append(spawn_point)
         route.append(cw_entry)
         route.append(cw_exit)
-        #TODO:  after crossing, keep walking on sidewalk randomly
+        route.append(sidewalk_exit)
+
+        self.draw_locations(route, 'route')
+        for p in polygon:
+            self.__print_loc(p)
         return route
     
     def draw_locations(self, locations: list[carla.Location], displayed_str=''):
-        for loc in locations:
+        for i,loc in enumerate(locations):
             self.world.debug.draw_string(
                 loc + carla.Location(z=0.2),
-                displayed_str + str(loc),
+                str(i) + displayed_str + str(loc),
                 color=carla.Color(255, 0, 0),
                 life_time=100.0
             )
@@ -75,11 +95,13 @@ class PedestrianCrossingScenario(BaseScenario):
 
     def _get_crosswalk_polygon(self, crosswalk_point) -> list[carla.Location]:
         try:
-            self.draw_locations(self.crosswalks)
             self.move_spectator_to_loc(crosswalk_point)
 
             polygons = self.get_all_crosswalk_polygons()
             target_group = list(filter(lambda group: crosswalk_point in group, polygons))[0]
+            for p in target_group:
+                p.z = 0
+
             return target_group
             
             
@@ -92,6 +114,7 @@ class PedestrianCrossingScenario(BaseScenario):
         try:
             if not hasattr(self, 'intersections'):
                 self.get_all_intersections()
+                
 
             if not hasattr(self, 'crosswalks'):
                 self.get_all_crosswalk()

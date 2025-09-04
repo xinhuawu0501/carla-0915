@@ -163,8 +163,17 @@ class CarlaEnv():
 
     def cleanup(self):
         try:   
-            if self.npc_car_list:
-                self.client.apply_batch([carla.command.DestroyActor(x) for x in self.npc_car_list])
+            actors = self.world.get_actors()
+            for a in actors:
+                type_id = a.type_id
+
+                if type_id.startswith('sensor.') or type_id.startswith('controller.ai'):
+                    a.stop()
+
+                if type_id.startswith('sensor.') or type_id.startswith('vehicle.') or type_id.startswith('walker.'):
+                    print(f'destroy {type_id} with id {a.id}')
+                    a.destroy()
+        
             
             if self.is_sync:
                 settings = self.world.get_settings()
