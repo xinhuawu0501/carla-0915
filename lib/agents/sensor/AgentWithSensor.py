@@ -64,7 +64,8 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
         self.spawn_car()
         scenario = PedestrianCrossingScenario(self.world, 1, speed=0.5)
         routes = scenario.get_possible_car_routes()
-        target_route = random.choice(routes)
+        turning_routes = routes['turning']
+        target_route = random.choice(turning_routes)
 
         print(f'route {target_route}')
         self.planner = CustomPlanner(self.car, route=target_route)

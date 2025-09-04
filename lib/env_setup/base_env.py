@@ -253,21 +253,6 @@ class CarBaseEnv():
                 color=carla.Color(255, 0, 0),
                 life_time=60.0
             )
-
-    def get_yaw_from_to(self, from_loc, to_loc):
-        dx = to_loc.x - from_loc.x
-        dy = to_loc.y - from_loc.y
-        yaw = math.degrees(math.atan2(dy, dx))  # atan2 gives angle in radians
-        return yaw
-    
-    def get_direction(self, from_loc: carla.Location, to_loc: carla.Location) -> carla.Vector3D:
-        dx = to_loc.x - from_loc.x
-        dy = to_loc.y - from_loc.y
-        dz = to_loc.z - from_loc.z
-        length = math.sqrt(dx*dx + dy*dy + dz*dz)
-        if length == 0:
-            return carla.Vector3D(0.0, 0.0, 0.0)
-        return carla.Vector3D(x=dx/length, y=dy/length, z=dz/length)
     
     def get_distance(self, a: carla.Location, b: carla.Location):
         return a.distance(b)

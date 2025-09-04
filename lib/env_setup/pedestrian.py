@@ -1,7 +1,7 @@
 import random
 import carla
 
-DEFAULT_SPEED=1.4
+DEFAULT_SPEED=0.8
 
 class Pedestrian:
     def __init__(self, world, route, speed=DEFAULT_SPEED) -> None:

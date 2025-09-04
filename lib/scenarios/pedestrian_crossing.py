@@ -1,5 +1,6 @@
 from lib.env_setup.pedestrian import Pedestrian
 from lib.scenarios.base_scenario import BaseScenario
+from lib.util.transform import get_yaw_diff
 import carla
 import random
 import time
@@ -87,7 +88,7 @@ class PedestrianCrossingScenario(BaseScenario):
             return []
         
     def _get_lanes_passing_crosswalk(self):
-        lanes_to_crosswalk = []
+        lanes_to_crosswalk = {'straight': [], 'turning': []}
         try:
             if not hasattr(self, 'intersections'):
                 self.get_all_intersections()
@@ -105,7 +106,11 @@ class PedestrianCrossingScenario(BaseScenario):
                 nxt = wp.next(10.0)[0]
 
                 route = [prev, wp, nxt]
-                lanes_to_crosswalk.append(route)
+                yaw_diff = get_yaw_diff(prev, nxt)
+                if yaw_diff > 30:
+                    lanes_to_crosswalk['turning'].append(route)
+                else:
+                    lanes_to_crosswalk['straight'].append(route)
         except Exception as e:
             print(f'_get_lanes_passing_crosswalk error: {e}')
         
