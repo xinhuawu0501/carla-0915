@@ -1,5 +1,7 @@
 from lib.agents.local_planner import CustomPlanner
 from lib.env_setup.base_env import CarBaseEnv
+from lib.env_setup.car import Car, Sensor
+from lib.env_setup.carla_env import CarlaEnv
 from lib.util.image_processing import process_semantic_img
 from lib.scenarios.pedestrian_crossing import PedestrianCrossingScenario
 from lib.constants.camera import IMG_X, IMG_Y
@@ -15,12 +17,13 @@ import queue
 
 
 
-class AgentWithSensor(CarBaseEnv, gym.Env):
+class AgentWithSensor(Car, gym.Env):
     def __init__(self):
-       super().__init__()
+       self.env = CarlaEnv()
+       super().__init__(self.env.world)
 
-       self.set_sync()
-       #!!! TODO: add local planner control to observation space
+       self.env.set_sync()
+
        self.observation_space = spaces.Dict({
             # "planner_control": spaces.Box(low=np.array([-1.0, 0.0, 0.0]), high=np.array([1.0, 1.0, 1.0]), dtype=np.float64),
             "image": spaces.Box(low=0, high=1, shape=(3, IMG_Y, IMG_X), dtype=np.float32),
@@ -31,7 +34,7 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
 
     def _get_obs(self):
         try:
-            img = self.get_semantic_img_from_queue()
+            img = self.get_raw_img_from_q(Sensor.SEMANTIC)
             img_arr = process_semantic_img(img)
             transposed_img = np.transpose(img_arr, (2, 0, 1))  # to (3, 600, 800)
             
@@ -63,17 +66,18 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
         turning_routes = routes['turning']
         target_route = random.choice(turning_routes)
 
-        self.spawn_car(sp=target_route[0].transform)
+        self.spawn_self(spawn_point=target_route[0].transform)
+        if self.car is None:
+            raise RuntimeError("Car failed to spawn. Check spawn point or blueprint.")
 
 
-        self.draw_waypoints(target_route, 'target')
+        self.env.draw_waypoints(target_route, 'target')
         self.planner = CustomPlanner(self.car, route=target_route, target_speed=5.0)
  
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
+        self.env.cleanup()
         self.cleanup()
-        self.clear_image_queue()
-        self.collision_data.clear()
 
         self.setup_scenario()
 
@@ -123,6 +127,7 @@ class AgentWithSensor(CarBaseEnv, gym.Env):
     
     
     def close(self):
+        self.env.cleanup()
         self.cleanup()
 
         print(f'cleaned up')

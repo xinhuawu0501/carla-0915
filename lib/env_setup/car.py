@@ -2,9 +2,11 @@ import carla
 import random
 import queue
 from enum import Enum
+import numpy as np
+import cv2
 
-from constants.camera import IMG_X, IMG_Y
-from util.image_processing import cv_display, process_rgb_img, process_semantic_img
+from lib.constants.camera import CITYSCAPES_PALETTE, IMG_X, IMG_Y
+from lib.util.image_processing import cv_display, process_rgb_img, process_semantic_img
 
 class Sensor(Enum):
     RGB = 'RGB'
@@ -30,56 +32,47 @@ class Car:
     def __init__(
             self, 
             world, 
-            sensor_options=DEFAULT_SENSOR_OPTION, 
-            sp=None, 
-            cam_attr=DEFAULT_CAM_ATTR):
+):
         self.world = world
-        self.sensor_options = sensor_options
+        self.world_bp = self.world.get_blueprint_library()
         self.vehicle_bps = self.world_bp.filter('vehicle.*.*')
-        self.all_sps = self.world.get_spawn_points()
+        self.all_sps = self.world.get_map().get_spawn_points()
 
-        self.cam_attr = cam_attr
-        self.sp = sp
+        self.image_queue = queue.Queue()
+        self.semantic_img_queue = queue.Queue()
+
         self.car = None
-
-        self.image_queue = queue.Queue
-        self.semantic_img_queue = queue.Queue
         
-        self.spawn_self()
-
-    def spawn_self(self):
+    def spawn_self(self, spawn_point=None, sensor_options=DEFAULT_SENSOR_OPTION, cam_attr=DEFAULT_CAM_ATTR):
         try:
             self.vehicle_bp = self.vehicle_bps[0]
-
-            if not self.sp:
-                self.sp = random.choice(self.all_sps)
-            
-            self.car = self.world.spawn_actor(self.vehicle_bp, self.car_sp)
+            sp = spawn_point if spawn_point else random.choice(self.all_sps)
+        
+            self.car = self.world.spawn_actor(self.vehicle_bp, sp)
             print(f'spawned {self.car.id}')
 
             cam_transform = carla.Transform(carla.Location(x=-4, z=3), carla.Rotation(pitch=-15))
 
-            if self.sensor_options.get(Sensor.RGB):
+            if sensor_options.get(Sensor.RGB):
                 self.cam_bp = self.world_bp.find('sensor.camera.rgb')
-                self.cam_bp.set_attribute('image_size_x', str(self.cam_attr.x))
-                self.cam_bp.set_attribute('image_size_y', str(self.cam_attr.y))
-                self.cam_bp.set_attribute('fov', str(self.cam_attr.fov))
+                self.cam_bp.set_attribute('image_size_x', str(cam_attr['x']))
+                self.cam_bp.set_attribute('image_size_y', str(cam_attr['y']))
+                self.cam_bp.set_attribute('fov', str(cam_attr['fov']))
 
                 self.rgb_cam = self.world.spawn_actor(self.cam_bp, cam_transform, attach_to=self.car)
                 self.rgb_cam.listen(lambda img: self.image_queue.put(img))
                 self.sensors.append(self.rgb_cam)
 
-            if self.sensor_options.get(Sensor.SEMANTIC):
-                self.semantic_img_queue = queue.Queue()
+            if sensor_options.get(Sensor.SEMANTIC):
                 cam_bp = self.world_bp.find('sensor.camera.semantic_segmentation')
-                cam_bp.set_attribute('image_size_x', str(self.cam_attr.x))
-                cam_bp.set_attribute('image_size_y', str(self.cam_attr.y))
-                cam_bp.set_attribute('fov', str(self.cam_attr.fov))
+                cam_bp.set_attribute('image_size_x', str(cam_attr['x']))
+                cam_bp.set_attribute('image_size_y', str(cam_attr['y']))
+                cam_bp.set_attribute('fov', str(cam_attr['fov']))
                 self.semantic_cam = self.world.spawn_actor(cam_bp, cam_transform, attach_to=self.car)
                 self.semantic_cam.listen(lambda img: self.semantic_img_queue.put(img))
                 self.sensors.append(self.semantic_cam)
 
-            if self.sensor_options.get(Sensor.COLSEN):
+            if sensor_options.get(Sensor.COLSEN):
                 self.colsen_bp = self.world_bp.find('sensor.other.collision')
                 self.colsen = self.world.spawn_actor(self.colsen_bp, carla.Transform(), attach_to=self.car)
                 self.colsen.listen(lambda event: self.collision_data.append(event))
@@ -91,6 +84,7 @@ class Car:
 
     def get_raw_img_from_q(self, img_type = Sensor.SEMANTIC):
         try:
+            raw_img = None
             if img_type == Sensor.SEMANTIC:
                 raw_img = self.semantic_img_queue.get(block=False)
             elif img_type == Sensor.RGB:
@@ -101,6 +95,10 @@ class Car:
 
     def display_img(self, raw, img_type = Sensor.SEMANTIC):
         try:
+            if raw is None:
+                print(f"No image to display for {img_type}")
+                return
+            processed = None
             if img_type == Sensor.SEMANTIC:
                 processed = process_semantic_img(raw)
             elif img_type == Sensor.RGB:
@@ -127,6 +125,9 @@ class Car:
             print(e)
 
     def is_at_traffic_light(self):
+        if not self.car:
+            return False
+        
         is_at = self.car.is_at_traffic_light()
         if is_at:
             print(f'is at traffic light: {is_at}')
@@ -135,11 +136,58 @@ class Car:
         return is_at
     
     def apply_control(self, control: carla.VehicleControl):
-        self.car.apply_control(control)
+        if self.car:
+            self.car.apply_control(control)
+
+        # Helper: convert RGB image to class ID map
+    def rgb_to_class_id(self, img_rgb):
+        """
+        img_rgb: HWC uint8
+        returns: HxW int32 with class IDs
+        """
+        class_map = np.zeros((img_rgb.shape[0], img_rgb.shape[1]), dtype=np.int32)
+        for class_id, color in CITYSCAPES_PALETTE.items():
+            mask = np.all(img_rgb == color, axis=2)
+            class_map[mask] = class_id
+        return class_map
     
-    def close(self):
+    def debug_semantic(self, obs):
+        """
+        obs: dict containing 'image' key (C,H,W) float32 normalized [0,1]
+        """
+        try:
+            semantic_img = obs['image']  # (C,H,W), normalized
+            # Convert to HWC uint8 for display
+            img_display = np.transpose(semantic_img, (1, 2, 0))  # HWC
+            img_display = (img_display * 255).astype(np.uint8)
+            img_display = cv2.cvtColor(img_display, cv2.COLOR_RGB2BGR)
+            
+            # Display the semantic image
+            cv_display(img_display)
+            
+            # Convert RGB to class IDs
+            class_map = self.rgb_to_class_id(img_display)
+            unique_classes = np.unique(class_map)         
+            print("Detected semantic classes:", [k for k in unique_classes])
+            
+            # Detect pedestrian presence
+            if 4 in unique_classes:
+                print("Pedestrian detected! Switching to RL control.")
+                self.pedestrian_detected = True
+            else:
+                self.pedestrian_detected = False
+
+        except Exception as e:
+            print("debug_semantic error:", e)
+
+    
+    def cleanup(self):
+        self.clear_all_q()
+        self.collision_data.clear()
+
         for sensor in self.sensors:
             sensor.stop()
             sensor.destroy()
         
-        self.car.destroy()
+        if self.car:
+            self.car.destroy()

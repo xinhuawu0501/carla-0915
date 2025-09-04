@@ -1,16 +1,22 @@
 from lib.agents.sensor.AgentWithSensor import AgentWithSensor
 
-def init():
-    env = AgentWithSensor()
+def init():   
+    agent = AgentWithSensor()
 
-   
     try:
-        env.reset()
-        env.move_spectator_to_loc(env.car.get_transform().location)
+        agent.reset()
+
+        env = agent.env
+        car = agent.car
+
+        if car is None:
+            raise RuntimeError("Car failed to spawn. Check spawn point or blueprint.")
+
+        env.move_spectator_to_loc(car.get_transform().location)
 
         while True:
-            control = env.get_planner_control()
-            env.car.apply_control(control)
+            control = agent.get_planner_control()
+            car.apply_control(control)
 
             if env.is_sync:
                 env.world.tick()
@@ -20,7 +26,7 @@ def init():
     except KeyboardInterrupt:
         pass
     finally:
-        env.cleanup()
+        agent.cleanup()
 
 init()
 
