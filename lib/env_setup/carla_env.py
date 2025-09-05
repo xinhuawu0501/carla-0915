@@ -167,8 +167,12 @@ class CarlaEnv():
             for a in actors:
                 type_id = a.type_id
 
-                if type_id.startswith('sensor.') or type_id.startswith('controller.ai'):
+                if type_id.startswith('controller.ai'):
                     a.stop()
+
+                elif type_id.startswith('sensor.'):
+                    if a.is_listening:
+                        a.stop() 
 
                 if type_id.startswith('sensor.') or type_id.startswith('vehicle.') or type_id.startswith('walker.'):
                     print(f'destroy {type_id} with id {a.id}')

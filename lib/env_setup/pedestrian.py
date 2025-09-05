@@ -30,7 +30,7 @@ class Pedestrian:
 
             sp_loc.z = 0.5  # lift to avoid collision
             spawn_transform = carla.Transform(sp_loc, carla.Rotation())
-            self.walker = self.world.try_spawn_actor(bp, spawn_transform)
+            self.walker = self.world.spawn_actor(bp, spawn_transform)
 
             self.world.tick()
 
@@ -40,17 +40,15 @@ class Pedestrian:
             self.controller.start()
             self.controller.set_max_speed(speed)
 
-            if len(route) < 1:
-                target_loc = self.world.get_random_location_from_navigation()
-                self.controller.go_to_location(target_loc)
-                print(f"✅ Walker spawned at {spawn_transform.location}, moving to {target_loc}")
+            destination = self.world.get_random_location_from_navigation()
 
-            else:
+            if len(route):
+                destination = route[-1]
                 for location in route:
                     self.controller.go_to_location(location)
-                    #TODO: when walker reach des, stop
                 
-                print(f"✅ Walker spawned at {spawn_transform.location}, moving to {route[-1]}")
+            print(f"✅ Walker spawned at {spawn_transform.location}, moving to {destination}")
+            self.controller.go_to_location(destination)
 
             return self.walker, self.controller
 
