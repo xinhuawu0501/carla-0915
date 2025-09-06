@@ -1,18 +1,13 @@
 import carla
-import time
 import random
-import math
-import numpy as np
-import queue
-from lib.constants.camera import CITYSCAPES_PALETTE
+from env_setup.pedestrian import Pedestrian
 from lib.util.image_processing import cv_display
-import cv2
-from shapely.geometry import Polygon, Point
 
 
 class CarlaEnv():
     is_sync = False
     npc_car_list = []
+    npc_walkers = []
     
     def __init__(self):
         self.client = carla.Client("localhost", 2000) # type: ignore
@@ -53,6 +48,17 @@ class CarlaEnv():
                 self.npc_car_list.append(c)
 
                 print(f'spawned {c.id}')
+
+    def spawn_npc_walkers(self, num_of_walker=10):
+        for i in range(num_of_walker):
+            ped = Pedestrian(self.world)
+            walker = ped.walker
+            if walker:
+                self.npc_walkers.append(walker)
+        
+        print(f'spawned {len(self.npc_walkers)} npc walkers')
+        self.world.set_pedestrians_cross_factor(1.0)
+
 
     def get_all_traffic_lights(self):
         self.traffic_lights = self.world.get_actors().filter('traffic.traffic_light')
@@ -146,14 +152,11 @@ class CarlaEnv():
             self.draw_waypoints(self.intersections)
         return self.intersections
  
-    def change_weather(self, rain=0.0, cloud=0.0):
+    def change_weather(self, rain=0.0, cloud=0.0, fog_density=0.0):
         weather = carla.WeatherParameters(
         cloudiness=cloud,        # 0-100
-        precipitation=rain,     # 0-100
-        precipitation_deposits=0.0,  # 0-100
-        wind_intensity=0.0,    # 0-100
-        sun_azimuth_angle=90.0,  # 0-360
-        sun_altitude_angle=75.0  # -90 to 90
+        fog_density = fog_density,
+        precipitation=rain
         )
         self.world.set_weather(weather)
 
