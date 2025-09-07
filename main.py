@@ -18,6 +18,8 @@ def init():
             control = agent.get_planner_control()
             car.apply_control(control)
 
+            # agent.display_img()
+
             if env.is_sync:
                 env.world.tick()
             else:
@@ -26,7 +28,7 @@ def init():
     except KeyboardInterrupt:
         pass
     finally:
-        agent.cleanup()
+        agent.close()
 
 init()
 

@@ -1,7 +1,7 @@
 from lib.agents.local_planner import CustomPlanner
-from lib.env_setup.base_env import CarBaseEnv
 from lib.env_setup.car import Car, Sensor
 from lib.env_setup.carla_env import CarlaEnv
+from lib.env_setup.scenario_manager import ScenarioManager
 from lib.util.image_processing import process_semantic_img
 from lib.scenarios.pedestrian_crossing import PedestrianCrossingScenario
 from lib.constants.camera import IMG_X, IMG_Y
@@ -61,18 +61,26 @@ class AgentWithSensor(Car, gym.Env):
             }
         
     def setup_scenario(self):
-        scenario = PedestrianCrossingScenario(self.world, 1, speed=0.5)
-        routes = scenario.get_possible_car_routes()
-        turning_routes = routes['turning']
-        target_route = random.choice(turning_routes)
+        scenario = ScenarioManager(self.env)
+        scenario.run_scenario()
 
-        self.spawn_self(spawn_point=target_route[0].transform)
+        # routes = scenario.get_possible_car_routes()
+        # turning_routes = routes['turning']
+        # target_route = random.choice(turning_routes)
+
+        # self.spawn_self(spawn_point=target_route[0].transform)
+        print(f'ego route {scenario.ego_route}')
+        sp = scenario.ego_route[0].transform
+
+        self.spawn_self(spawn_point=sp)
+        
         if self.car is None:
             raise RuntimeError("Car failed to spawn. Check spawn point or blueprint.")
 
+        self.planner = CustomPlanner(self.car, route=scenario.ego_route, target_speed=10)
 
-        self.env.draw_waypoints(target_route, 'target')
-        self.planner = CustomPlanner(self.car, route=target_route, target_speed=5.0)
+        # self.env.draw_waypoints(target_route, 'target')
+        # self.planner = CustomPlanner(self.car, route=target_route, target_speed=5.0)
  
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)

@@ -31,8 +31,7 @@ class Car:
 
     def __init__(
             self, 
-            world, 
-):
+            world):
         self.world = world
         self.world_bp = self.world.get_blueprint_library()
         self.vehicle_bps = self.world_bp.filter('vehicle.*.*')
@@ -165,7 +164,6 @@ class Car:
             img_display = (img_display * 255).astype(np.uint8)
             img_display = cv2.cvtColor(img_display, cv2.COLOR_RGB2BGR)
             
-            # Display the semantic image
             cv_display(img_display)
             
             # Convert RGB to class IDs

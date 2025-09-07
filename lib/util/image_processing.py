@@ -22,8 +22,7 @@ def process_semantic_img(image):
     except Exception as e:
         print(e)
         return np.zeros((600, 800, 3), dtype=np.uint8) #output black image
-
-
+    
 
 def cv_display(img_arr):
     cv2.imshow("", img_arr)

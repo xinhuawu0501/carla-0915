@@ -2,7 +2,6 @@ import carla
 import random
 from shapely import Polygon, Point
 
-from env_setup.pedestrian import Pedestrian
 from lib.env_setup.pedestrian import Pedestrian
 from lib.util.transform import get_yaw_diff
 
@@ -21,7 +20,7 @@ class CarlaEnv():
         self.spawn_points = self.world_map.get_spawn_points()
         self.spectator = self.world.get_spectator()
         self.vehicle_bps = self.world_bp.filter('vehicle.*.*')
-
+        self.crosswalks = self.get_all_crosswalk()
     def move_spectator_to_loc(self, location):
         spec_trans = location 
         spec_trans.z += 20.0
@@ -40,7 +39,7 @@ class CarlaEnv():
         for i in range(num_of_car):
             c = self.world.try_spawn_actor(random.choice(self.vehicle_bps), random.choice(self.spawn_points))
             if c is not None:
-                if self.TM_PORT: c.set_autopilot(True, self.TM_PORT)
+                if hasattr(self, 'TM_PORT'): c.set_autopilot(True, self.TM_PORT)
                 else: c.set_autopilot(True)
 
                 self.npc_car_list.append(c)
@@ -132,7 +131,55 @@ class CarlaEnv():
 
         return polygons
     
-    def _get_lanes_passing_crosswalk(self):
+    def _get_crosswalk_polygon(self, crosswalk_point) -> list[carla.Location]:
+        try:
+            polygons = self.get_all_crosswalk_polygons()
+            target_group = list(filter(lambda group: crosswalk_point in group, polygons))[0]
+            for p in target_group:
+                p.z = 0
+
+            return target_group
+            
+            
+        except Exception as e:
+            print(f'_get_crosswalk_polygon err: {e}')
+            return []
+        
+    def generate_navigation_from_wp(self, wp, before_wp=20.0, after_wp=20.0, d=5.0):
+        nav = []
+
+        try:
+            curr = wp
+            before_steps = int(before_wp/d)
+            after_steps = int(after_wp/d)
+            for _ in range(before_steps):
+                prevs = curr.previous(d)
+                if not prevs:
+                    break
+                curr = prevs[0]
+                nav.insert(0, curr)  
+
+            nav.append(wp)
+
+            curr = wp
+            for _ in range(after_steps):
+                nexts = curr.next(d)
+                if not nexts:
+                    break
+                curr = nexts[0]
+                nav.append(curr)
+
+            if len(nav) < before_steps + after_steps + 1:
+                raise Exception("Navigation path too short")
+
+        except Exception as e:
+            print(f"[WARN] Failed to generate navigation: {e}")
+
+        return nav
+
+
+
+    def _get_lanes_passing_crosswalk(self, target_polygon):
         lanes_to_crosswalk = {'straight': [], 'turning': []}
         try:
             if not hasattr(self, 'intersections'):
@@ -142,17 +189,18 @@ class CarlaEnv():
             if not hasattr(self, 'crosswalks'):
                 self.get_all_crosswalk()
 
-            loc_in_cw = self._get_crosswalk_polygon(self.target_crosswalk)
-
-            crosswalk_polygon = Polygon([(pt.x, pt.y) for pt in loc_in_cw])
+            crosswalk_polygon = Polygon([(pt.x, pt.y) for pt in target_polygon])
             wps_in_crosswalk_polygon = [wp for wp in self.intersections if crosswalk_polygon.contains(Point(wp.transform.location.x, wp.transform.location.y))]
 
             for i, wp in enumerate(wps_in_crosswalk_polygon):
-                prev = wp.previous(10.0)[0]
-                nxt = wp.next(10.0)[0]
+                before = 20
+                after = 20
+                d = 5
+                route = self.generate_navigation_from_wp(wp, before_wp=before, after_wp=after, d=d)
 
-                route = [prev, wp, nxt]
-                yaw_diff = get_yaw_diff(prev.transform, nxt.transform)
+                if not len(route): continue
+                start = route[0]
+                yaw_diff = get_yaw_diff(wp.transform, start.transform)
                 if yaw_diff > 30:
                     lanes_to_crosswalk['turning'].append(route)
                 else:
