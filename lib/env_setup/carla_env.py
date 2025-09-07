@@ -262,11 +262,12 @@ class CarlaEnv():
             self.draw_waypoints(self.intersections)
         return self.intersections
  
-    def change_weather(self, rain=0.0, cloud=0.0, fog_density=0.0):
+    def change_weather(self,sun_altitude_angle=70.0, precipitation=0.0, cloudiness=0.0, fog_density=0.0):
         weather = carla.WeatherParameters(
-        cloudiness=cloud,        # 0-100
+        cloudiness=cloudiness,        # 0-100
         fog_density = fog_density,
-        precipitation=rain
+        precipitation=precipitation,
+        sun_altitude_angle=sun_altitude_angle
         )
         self.world.set_weather(weather)
 

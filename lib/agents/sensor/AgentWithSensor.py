@@ -64,12 +64,6 @@ class AgentWithSensor(Car, gym.Env):
         scenario = ScenarioManager(self.env)
         scenario.run_scenario()
 
-        # routes = scenario.get_possible_car_routes()
-        # turning_routes = routes['turning']
-        # target_route = random.choice(turning_routes)
-
-        # self.spawn_self(spawn_point=target_route[0].transform)
-        print(f'ego route {scenario.ego_route}')
         sp = scenario.ego_route[0].transform
 
         self.spawn_self(spawn_point=sp)
