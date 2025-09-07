@@ -1,7 +1,10 @@
 import carla
 import random
+from shapely import Polygon, Point
+
 from env_setup.pedestrian import Pedestrian
-from lib.util.image_processing import cv_display
+from lib.env_setup.pedestrian import Pedestrian
+from lib.util.transform import get_yaw_diff
 
 
 class CarlaEnv():
@@ -19,7 +22,6 @@ class CarlaEnv():
         self.spectator = self.world.get_spectator()
         self.vehicle_bps = self.world_bp.filter('vehicle.*.*')
 
- 
     def move_spectator_to_loc(self, location):
         spec_trans = location 
         spec_trans.z += 20.0
@@ -33,11 +35,7 @@ class CarlaEnv():
         self.world.apply_settings(settings)
         self.is_sync = True
 
-    def create_tm(self):
-        self.TM_PORT = 8000
-        self.tm = self.client.get_trafficmanager(self.TM_PORT)
-        self.tm.set_hybrid_physics_mode(True)
-
+# =========== npc util ===================================
     def spawn_NPC_cars(self, num_of_car=50):
         for i in range(num_of_car):
             c = self.world.try_spawn_actor(random.choice(self.vehicle_bps), random.choice(self.spawn_points))
@@ -49,9 +47,9 @@ class CarlaEnv():
 
                 print(f'spawned {c.id}')
 
-    def spawn_npc_walkers(self, num_of_walker=10):
+    def spawn_npc_walkers(self, num_of_walker=10, speed=None, route=[]):
         for i in range(num_of_walker):
-            ped = Pedestrian(self.world)
+            ped = Pedestrian(self.world, route=route, speed=speed)
             walker = ped.walker
             if walker:
                 self.npc_walkers.append(walker)
@@ -59,6 +57,11 @@ class CarlaEnv():
         print(f'spawned {len(self.npc_walkers)} npc walkers')
         self.world.set_pedestrians_cross_factor(1.0)
 
+# ======== traffic light management ===================
+    def create_tm(self):
+        self.TM_PORT = 8000
+        self.tm = self.client.get_trafficmanager(self.TM_PORT)
+        self.tm.set_hybrid_physics_mode(True)
 
     def get_all_traffic_lights(self):
         self.traffic_lights = self.world.get_actors().filter('traffic.traffic_light')
@@ -84,6 +87,7 @@ class CarlaEnv():
         tl.set_state(carla.TrafficLightState.Yellow)
         print(f'turning {id} from {tl.get_state()} to y')
 
+# ======== draw string in carla simulation ===================
     def draw_spawn_points(self):
         for i, sp in enumerate(self.spawn_points):
             loc = sp.location + carla.Location(z=0.5)  # lift above ground
@@ -94,11 +98,6 @@ class CarlaEnv():
                 color=carla.Color(255, 255, 0),  # yellow
                 life_time=60.0
             )
-
-    def generate_wp(self, distance=2.0):
-        self.wps = self.world_map.generate_waypoints(distance=distance)
-        return self.wps
-   
 
     def draw_waypoints(self, wps, strg=''):
         for wp in wps:
@@ -119,18 +118,51 @@ class CarlaEnv():
                 life_time=60.0
             )
     
-    def get_distance(self, a: carla.Location, b: carla.Location):
-        return a.distance(b)
-
-    def get_closest_spawn_point(self, target_location: carla.Location) -> carla.Transform:
-        closest_spawn = min(
-            self.spawn_points,
-            key=lambda sp: sp.location.distance(target_location)
-        )
-
-        return closest_spawn
+    #=========== crosswalk & sidewalk utilities ===================================================#
+    def get_all_crosswalk(self) -> list[carla.Location]:
+        self.crosswalks = self.world_map.get_crosswalks()
+        return self.crosswalks
     
-    #=========== crosswalk utilities ===================================================#
+    def get_all_crosswalk_polygons(self):
+        polygons = []
+        
+        for i in range(0, len(self.crosswalks), 5):
+            cw_group = self.crosswalks[i:i + 5]
+            polygons.append(cw_group)
+
+        return polygons
+    
+    def _get_lanes_passing_crosswalk(self):
+        lanes_to_crosswalk = {'straight': [], 'turning': []}
+        try:
+            if not hasattr(self, 'intersections'):
+                self.get_all_intersections()
+                
+
+            if not hasattr(self, 'crosswalks'):
+                self.get_all_crosswalk()
+
+            loc_in_cw = self._get_crosswalk_polygon(self.target_crosswalk)
+
+            crosswalk_polygon = Polygon([(pt.x, pt.y) for pt in loc_in_cw])
+            wps_in_crosswalk_polygon = [wp for wp in self.intersections if crosswalk_polygon.contains(Point(wp.transform.location.x, wp.transform.location.y))]
+
+            for i, wp in enumerate(wps_in_crosswalk_polygon):
+                prev = wp.previous(10.0)[0]
+                nxt = wp.next(10.0)[0]
+
+                route = [prev, wp, nxt]
+                yaw_diff = get_yaw_diff(prev.transform, nxt.transform)
+                if yaw_diff > 30:
+                    lanes_to_crosswalk['turning'].append(route)
+                else:
+                    lanes_to_crosswalk['straight'].append(route)
+        except Exception as e:
+            print(f'_get_lanes_passing_crosswalk error: {e}')
+        
+        return lanes_to_crosswalk
+
+
     def _get_closest_crosswalk_point_from_wp(self, crosswalk_pol, wp)->carla.Location:
         loc = wp.transform.location
         min_d = 1000000
@@ -143,7 +175,37 @@ class CarlaEnv():
                 result = p
 
         return result
-          
+    
+    def get_sidewalks(self, x_range=(-300, 300), y_range=(-300, 300), step=2.0):
+        sidewalk_wps = []
+        seen = set()
+
+        for x in range(int(x_range[0]), int(x_range[1]), int(step)):
+            for y in range(int(y_range[0]), int(y_range[1]), int(step)):
+                loc = carla.Location(x=float(x), y=float(y), z=0.0) # type: ignore
+                wp = self.world_map.get_waypoint(
+                    loc,
+                    project_to_road=False,
+                    lane_type=carla.LaneType.Sidewalk # type: ignore
+                )
+                if wp and (wp.road_id, wp.lane_id, round(wp.s, 1)) not in seen:
+                    sidewalk_wps.append(wp)
+                    seen.add((wp.road_id, wp.lane_id, round(wp.s, 1)))
+    
+        return sidewalk_wps
+    
+# =========== other utils =============================================
+    def generate_wp(self, distance=2.0):
+        self.wps = self.world_map.generate_waypoints(distance=distance)
+        return self.wps
+   
+    def get_distance(self, a: carla.Location, b: carla.Location):
+        return a.distance(b)
+    
+    def get_available_map(self):
+        maps = self.client.get_available_maps()
+        return maps
+
     def get_all_intersections(self, draw_str=False):
         waypoints = self.generate_wp(2.0)
 
@@ -159,10 +221,6 @@ class CarlaEnv():
         precipitation=rain
         )
         self.world.set_weather(weather)
-
-    def get_available_map(self):
-        maps = self.client.get_available_maps()
-        return maps
 
     def cleanup(self):
         try:   
