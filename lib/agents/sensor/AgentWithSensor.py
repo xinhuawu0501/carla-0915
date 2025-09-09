@@ -61,20 +61,30 @@ class AgentWithSensor(Car, gym.Env):
             }
         
     def setup_scenario(self):
-        scenario = ScenarioManager(self.env)
-        scenario.run_scenario()
+        self.scenario = ScenarioManager(self.env)
+        ego_target_speed = self.scenario.ego_target_speed
+        ego_route = self.scenario.ego_route
 
-        sp = scenario.ego_route[0].transform
-
-        self.spawn_self(spawn_point=sp)
+        sp = ego_route[0].transform
+        self.spawn_self(spawn_point=sp, sensor_options={Sensor.RGB: True, Sensor.SEMANTIC: False})
         
         if self.car is None:
             raise RuntimeError("Car failed to spawn. Check spawn point or blueprint.")
 
-        self.planner = CustomPlanner(self.car, route=scenario.ego_route, target_speed=10)
+        self.planner = CustomPlanner(self.car, route=ego_route, target_speed=ego_target_speed)
+        self.scenario.run_scenario(ego=self, planner=self.planner)
 
-        # self.env.draw_waypoints(target_route, 'target')
-        # self.planner = CustomPlanner(self.car, route=target_route, target_speed=5.0)
+        while True:
+            control = self.get_planner_control()
+            self.car.apply_control(control)
+
+            # self.display_img(img_type=Sensor.RGB)
+
+            if self.env.is_sync:
+                self.env.world.tick()
+                self.scenario.tick()
+            else:
+                self.env.world.wait_for_tick()  
  
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)

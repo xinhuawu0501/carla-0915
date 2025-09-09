@@ -21,9 +21,10 @@ class CarlaEnv():
         self.spectator = self.world.get_spectator()
         self.vehicle_bps = self.world_bp.filter('vehicle.*.*')
         self.crosswalks = self.get_all_crosswalk()
+        
     def move_spectator_to_loc(self, location):
         spec_trans = location 
-        spec_trans.z += 20.0
+        spec_trans.z += 25.0
         rot = carla.Rotation(pitch=-90.0, yaw=0.0, roll=0.0)
         self.spectator.set_transform(carla.Transform(spec_trans, rot))
 
@@ -177,9 +178,7 @@ class CarlaEnv():
 
         return nav
 
-
-
-    def _get_lanes_passing_crosswalk(self, target_polygon):
+    def _get_lanes_passing_crosswalk(self, target_polygon: list[carla.Location]):
         lanes_to_crosswalk = {'straight': [], 'turning': []}
         try:
             if not hasattr(self, 'intersections'):
@@ -193,14 +192,15 @@ class CarlaEnv():
             wps_in_crosswalk_polygon = [wp for wp in self.intersections if crosswalk_polygon.contains(Point(wp.transform.location.x, wp.transform.location.y))]
 
             for i, wp in enumerate(wps_in_crosswalk_polygon):
-                before = 20
-                after = 20
+                before = 30
+                after = 30
                 d = 5
                 route = self.generate_navigation_from_wp(wp, before_wp=before, after_wp=after, d=d)
 
                 if not len(route): continue
                 start = route[0]
                 yaw_diff = get_yaw_diff(wp.transform, start.transform)
+                
                 if yaw_diff > 30:
                     lanes_to_crosswalk['turning'].append(route)
                 else:
@@ -224,7 +224,7 @@ class CarlaEnv():
 
         return result
     
-    def get_sidewalks(self, x_range=(-300, 300), y_range=(-300, 300), step=2.0):
+    def get_sidewalks(self, x_range=(-300, 300), y_range=(-300, 300), step=2.0) -> list[carla.Waypoint]:
         sidewalk_wps = []
         seen = set()
 
@@ -248,7 +248,7 @@ class CarlaEnv():
         return self.wps
    
     def get_distance(self, a: carla.Location, b: carla.Location):
-        return a.distance(b)
+        return a.distance(b) # float (meters)
     
     def get_available_map(self):
         maps = self.client.get_available_maps()

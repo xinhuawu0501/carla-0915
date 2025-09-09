@@ -11,11 +11,11 @@ class Pedestrian:
         self.world_map = self.world.get_map()
 
         #if no specified spawn point and route, let walker wander randomly
-        walker, controller = self._spawn_walker(route=route, speed=speed)
-        self.walker = walker
-        self.controller = controller
+        self.speed = speed
+        self.walker = self._spawn_walker(route=route)
+        self.has_started = False
 
-    def _spawn_walker(self, route=[], speed=DEFAULT_SPEED):
+    def _spawn_walker(self, route=[]):
         try:
             bp = random.choice(self.walker_bps)
             if bp.has_attribute("is_invincible"):
@@ -30,31 +30,41 @@ class Pedestrian:
 
             sp_loc.z = 0.5  # lift to avoid collision
             spawn_transform = carla.Transform(sp_loc, carla.Rotation())
-            self.walker = self.world.spawn_actor(bp, spawn_transform)
+            walker = self.world.spawn_actor(bp, spawn_transform)
 
             self.world.tick()
 
+            return walker
+        except Exception as e:
+            print(f'_spawn_walker err {e}')
+            return None
+        
+    
+    def start_walker(self, route=[]):
+        try:
             # Spawn AI controller
             controller_bp = self.bp.find("controller.ai.walker")
             self.controller = self.world.spawn_actor(controller_bp, carla.Transform(), attach_to=self.walker) # type: ignore
             self.controller.start()
-            self.controller.set_max_speed(speed)
-
-            destination = self.world.get_random_location_from_navigation()
+            self.controller.set_max_speed(self.speed)
 
             if len(route):
                 destination = route[-1]
                 for location in route:
                     self.controller.go_to_location(location)
-                
-            print(f"✅ Walker spawned at {spawn_transform.location}, moving to {destination}")
-            self.controller.go_to_location(destination)
+                print(f"✅ Walker moving to {route[-1]}")
 
-            return self.walker, self.controller
+            else:
+                destination = self.world.get_random_location_from_navigation()
+                self.controller.go_to_location(destination)
+                print(f"✅ Walker moving to {destination}")
 
+            self.has_started = True
+
+            #TODO: stop walker after reaching destination
         except Exception as e:
-            print(f'_spawn_walker err {e}')
-            return None, None
+            print(e)
+
 
 
 
