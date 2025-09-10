@@ -78,7 +78,7 @@ class AgentWithSensor(Car, gym.Env):
             control = self.get_planner_control()
             self.car.apply_control(control)
 
-            # self.display_img(img_type=Sensor.RGB)
+            self.display_img(img_type=Sensor.RGB)
 
             if self.env.is_sync:
                 self.env.world.tick()

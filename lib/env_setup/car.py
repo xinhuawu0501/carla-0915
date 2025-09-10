@@ -46,9 +46,11 @@ class Car:
         try:
             self.vehicle_bp = self.vehicle_bps[0]
             sp = spawn_point if spawn_point else random.choice(self.all_sps)
+
+            sensor_options = {**DEFAULT_SENSOR_OPTION, **sensor_options}
         
             self.car = self.world.spawn_actor(self.vehicle_bp, sp)
-            print(f'spawned {self.car.id}')
+            print(f'spawned {self.car.id} with sensor {sensor_options}')
 
             cam_transform = carla.Transform(carla.Location(x=-4, z=3), carla.Rotation(pitch=-15))
 
