@@ -3,7 +3,6 @@ from lib.env_setup.car import Car, Sensor
 from lib.env_setup.carla_env import CarlaEnv
 from lib.env_setup.scenario_manager import ScenarioManager
 from lib.util.image_processing import process_semantic_img
-from lib.scenarios.pedestrian_crossing import PedestrianCrossingScenario
 from lib.constants.camera import IMG_X, IMG_Y
 
 import time
@@ -63,8 +62,9 @@ class AgentWithSensor(Car, gym.Env):
     def setup_scenario(self):
         self.scenario = ScenarioManager(self.env)
         ego_target_speed = self.scenario.ego_target_speed
-        ego_route = self.scenario.ego_route
+        self.scenario.run_scenario()
 
+        ego_route = self.scenario.ego_route
         sp = ego_route[0].transform
         self.spawn_self(spawn_point=sp, sensor_options={Sensor.RGB: True, Sensor.SEMANTIC: False})
         
@@ -72,7 +72,6 @@ class AgentWithSensor(Car, gym.Env):
             raise RuntimeError("Car failed to spawn. Check spawn point or blueprint.")
 
         self.planner = CustomPlanner(self.car, route=ego_route, target_speed=ego_target_speed)
-        self.scenario.run_scenario(ego=self, planner=self.planner)
 
  
     def reset(self, seed=None, options=None):
@@ -107,7 +106,7 @@ class AgentWithSensor(Car, gym.Env):
         )
 
         self.apply_control(planner_control)
-        self.world.tick()
+        self.scenario.tick()
 
         v = self.car.get_velocity()
         speed = math.sqrt(v.x**2 + v.y**2 + v.z**2) * 3.6

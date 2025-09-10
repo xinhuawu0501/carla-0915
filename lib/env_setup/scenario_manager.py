@@ -25,10 +25,9 @@ class ScenarioManager:
         self.config = load_yaml(os.path.join(os.getcwd(), 'lib/env_setup/config.yaml'))
         self.traffic_size = random.randint(10, 50)
         self.walker_max_speed = 1.4 + random.uniform(-0.6, 0.6) #between 0.8 and 2 m/s
-        self.ego_target_speed = 10
+        self.ego_target_speed = 50
 
         # self.env.spawn_NPC_cars(self.traffic_size)
-        self.get_actor_routes()
 
         # log current scenario
         self.load_weather()
@@ -40,6 +39,7 @@ class ScenarioManager:
 
     def get_actor_routes(self):
         try:
+            #TODO: 
             target_polygon = random.choice(self.env.get_all_crosswalk_polygons())
             lanes = self.env._get_lanes_passing_crosswalk(target_polygon)
             # calculate ego vehicle route
@@ -59,9 +59,9 @@ class ScenarioManager:
             self.walker_route = [closest_sidewalk_wp_loc, closest_cw, collision_wp.transform.location, opposite_cw, opposite_sidewalk_loc]
             
             # debugging util
-            self.env.draw_locations(self.walker_route, 'walker route')
-            self.env.draw_waypoints(self.ego_route)
-            self.env.draw_waypoints([collision_wp], 'collision')
+            # self.env.draw_locations(self.walker_route, 'walker route')
+            # self.env.draw_waypoints(self.ego_route)
+            # self.env.draw_waypoints([collision_wp], 'collision')
             self.env.move_spectator_to_loc(collision_wp.transform.location)
         except Exception as e:
             print(e)           
@@ -86,15 +86,18 @@ class ScenarioManager:
             print(e)
             return d
 
-    def run_scenario(self, ego: Car, planner: CustomPlanner):
+    def run_scenario(self):
         try:
-            self.set_ego(ego=ego, ego_planner=planner)
+            # get ego and walker route
+            self.get_actor_routes()
+
             # calculate ego's estimated time to crosswalk
             ego_collision_point_i = int(len(self.ego_route) / 2)
             ego_d_to_cw = self.get_route_len(self.ego_route[:ego_collision_point_i + 1])
             ego_speed = self.ego_target_speed * 1000 / 60 / 60 # to m / s
+            
             # TODO
-            buffer = random.uniform(0.3, 0.5)
+            buffer = random.uniform(0.1, 0.3)
             ego_time_to_cw = ego_d_to_cw / (ego_speed - buffer) 
 
             # calculate walker time to crosswalk
@@ -108,7 +111,14 @@ class ScenarioManager:
             print(f'ego_time_to_cw: {ego_time_to_cw}\nwalker_time_to_cw: {walker_time_to_cw}')
 
             walker_delay = max(0, ego_time_to_cw - walker_time_to_cw) 
-            # walker_delay += 1.0
+
+            # when car arrive collision point before walker            
+            if not walker_delay:
+                new_target_speed = walker_d_to_cw / ego_time_to_cw
+                print(f'walker speed up from {self.walker_max_speed} to {new_target_speed}')
+
+                self.walker_max_speed = new_target_speed
+
             delay_tick = int(walker_delay / fixed_delta_seconds)
             self.walker_start_frame = self.world.get_snapshot().frame + delay_tick
           
@@ -122,15 +132,11 @@ class ScenarioManager:
             self.ped.set_manual_control()
             direction = get_direction(self.walker_route[0], self.walker_route[-1])
 
-            if not self.ped.has_started:  
-                # self.ped.start_walker(self.walker_route)
-                self.ped.apply_manual_control(direction=direction)
+            self.ped.apply_manual_control(direction=direction)
             
-            walker_speed_diff = self.walker_max_speed - self.ped.get_speed()
-            ego_speed_diff = self.ego_target_speed - self.ego.get_speed()
-
-            print(f'walker speed diff: {walker_speed_diff} / car speed diff: {ego_speed_diff}')
-            
+            #walker_speed_diff = self.walker_max_speed - self.ped.get_speed()
+        
+        self.world.tick()
 
 
     def load_weather(self):

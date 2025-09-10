@@ -178,7 +178,7 @@ class CarlaEnv():
 
         return nav
 
-    def _get_lanes_passing_crosswalk(self, target_polygon: list[carla.Location]):
+    def _get_lanes_passing_crosswalk(self, target_polygon: list[carla.Location], len_before=50.0, len_after=20.0, d=3.0):
         lanes_to_crosswalk = {'straight': [], 'turning': []}
         try:
             if not hasattr(self, 'intersections'):
@@ -192,9 +192,9 @@ class CarlaEnv():
             wps_in_crosswalk_polygon = [wp for wp in self.intersections if crosswalk_polygon.contains(Point(wp.transform.location.x, wp.transform.location.y))]
 
             for i, wp in enumerate(wps_in_crosswalk_polygon):
-                before = 30
-                after = 30
-                d = 5
+                before = len_before
+                after = len_after
+                d = d
                 route = self.generate_navigation_from_wp(wp, before_wp=before, after_wp=after, d=d)
 
                 if not len(route): continue

@@ -19,9 +19,9 @@ def init():
                 agent.display_img(img_type=Sensor.RGB)
 
                 if agent.env.is_sync:
-                    agent.env.world.tick()
                     agent.scenario.tick()
                 else:
+                    #async mode
                     agent.env.world.wait_for_tick()  
                 step += 1
             if agent.collision_data:
