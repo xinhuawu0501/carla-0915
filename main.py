@@ -4,7 +4,7 @@ from lib.env_setup.car import Sensor
 def init():   
     agent = AgentWithSensor()
     step = 0
-    round = 50
+    round = 5
     num_of_col = 0
     try:
         for _ in range(round):
@@ -16,7 +16,7 @@ def init():
                 control = agent.get_planner_control()
                 agent.car.apply_control(control)
 
-                agent.display_img(img_type=Sensor.RGB)
+                # agent.display_img(img_type=Sensor.RGB)
 
                 if agent.env.is_sync:
                     agent.scenario.tick()

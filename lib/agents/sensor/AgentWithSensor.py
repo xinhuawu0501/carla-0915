@@ -87,6 +87,14 @@ class AgentWithSensor(Car, gym.Env):
     def get_planner_control(self):
         return self.planner.run_step(debug=True)
     
+    def get_reward(self):
+        reward = 0
+
+        # punish: collision, hard brake
+
+        # reward: reach destination
+
+        return reward
     
     def step(self, action):
         rl_control = carla.VehicleControl(
