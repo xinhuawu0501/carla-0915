@@ -49,7 +49,7 @@ class CarlaEnv():
 
     def spawn_npc_walkers(self, num_of_walker=10, speed=None, route=[]):
         for i in range(num_of_walker):
-            ped = Pedestrian(self.world, route=route, speed=speed)
+            ped = Pedestrian(self.world, route=route, max_speed=speed)
             walker = ped.walker
             if walker:
                 self.npc_walkers.append(walker)

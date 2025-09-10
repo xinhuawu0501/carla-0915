@@ -1,17 +1,19 @@
 import random
 import carla
 
-DEFAULT_SPEED=1.0
+from lib.util.transform import get_direction
+
+DEFAULT_MAX_SPEED=1.4
 
 class Pedestrian:
-    def __init__(self, world, route=[], speed=DEFAULT_SPEED) -> None:
+    def __init__(self, world, route=[], max_speed=DEFAULT_MAX_SPEED) -> None:
         self.world = world
         self.bp = self.world.get_blueprint_library()
         self.walker_bps = self.bp.filter("walker.pedestrian.*")
         self.world_map = self.world.get_map()
 
         #if no specified spawn point and route, let walker wander randomly
-        self.speed = speed
+        self.max_speed = max_speed
         self.walker = self._spawn_walker(route=route)
         self.has_started = False
 
@@ -38,15 +40,31 @@ class Pedestrian:
         except Exception as e:
             print(f'_spawn_walker err {e}')
             return None
+    
+    def set_manual_control(self):
+        '''
+        only for use case when route is specified
+        '''
+        if not self.walker: return
+        
+        self.man_control = carla.WalkerControl()
+        self.man_control.speed = self.max_speed  # fixed speed (m/s)
+        return self.man_control
+    
+    def apply_manual_control(self, direction):
+        if not self.walker: return
+
+        self.has_started = True
+        self.man_control.direction = direction
+        self.walker.apply_control(self.man_control)
         
     
-    def start_walker(self, route=[]):
+    def start_ai_controller(self, route=[]):
         try:
-            # Spawn AI controller
             controller_bp = self.bp.find("controller.ai.walker")
             self.controller = self.world.spawn_actor(controller_bp, carla.Transform(), attach_to=self.walker) # type: ignore
             self.controller.start()
-            self.controller.set_max_speed(self.speed)
+            self.controller.set_max_speed(self.max_speed)
 
             if len(route):
                 destination = route[-1]
@@ -60,8 +78,6 @@ class Pedestrian:
                 print(f"✅ Walker moving to {destination}")
 
             self.has_started = True
-
-            #TODO: stop walker after reaching destination
         except Exception as e:
             print(e)
 

@@ -9,6 +9,7 @@ import os
 import time
 
 from lib.env_setup.pedestrian import Pedestrian
+from lib.util.transform import get_direction
 
 def load_yaml(file_path):
     with open(file_path, "r") as f:
@@ -97,16 +98,16 @@ class ScenarioManager:
             walker_d_to_cw = self.get_route_len(self.walker_route[:walker_collision_point_i + 1])
             walker_time_to_cw = walker_d_to_cw / self.walker_max_speed # sec
             
-            self.ped = Pedestrian(self.env.world, route=self.walker_route, speed=self.walker_max_speed)
+            self.ped = Pedestrian(self.env.world, route=self.walker_route, max_speed=self.walker_max_speed)
             fixed_delta_seconds = self.settings.fixed_delta_seconds
 
             print(f'ego_time_to_cw: {ego_time_to_cw}\nwalker_time_to_cw: {walker_time_to_cw}')
 
             #TODO fix walker too slow issue
             walker_delay = max(0, ego_time_to_cw - walker_time_to_cw) 
+            # walker_delay += 1.0
             delay_tick = int(walker_delay / fixed_delta_seconds)
             self.walker_start_frame = self.world.get_snapshot().frame + delay_tick
-            print(self.walker_start_frame)
           
         except Exception as e:
             print(f'run scenario fail: {e}')
@@ -115,9 +116,12 @@ class ScenarioManager:
         """Call this once per env.step() to update scenario logic"""
         frame = self.world.get_snapshot().frame
         if self.ped.walker and self.walker_start_frame and frame >= self.walker_start_frame:
+            self.ped.set_manual_control()
+            direction = get_direction(self.walker_route[0], self.walker_route[-1])
+
             if not self.ped.has_started:  
-                self.ped.start_walker(self.walker_route)
-                print(f'walker starts at {frame}')
+                # self.ped.start_walker(self.walker_route)
+                self.ped.apply_manual_control(direction=direction)
 
 
     def load_weather(self):
