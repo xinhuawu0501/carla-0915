@@ -35,7 +35,7 @@ class ScenarioManager:
         self.log_current_scenario()
 
     def set_ego(self, ego: Car, ego_planner: CustomPlanner):
-        self.egp = ego
+        self.ego = ego
         self.ego_planner = ego_planner
 
     def get_actor_routes(self):
@@ -88,10 +88,14 @@ class ScenarioManager:
 
     def run_scenario(self, ego: Car, planner: CustomPlanner):
         try:
+            self.set_ego(ego=ego, ego_planner=planner)
             # calculate ego's estimated time to crosswalk
             ego_collision_point_i = int(len(self.ego_route) / 2)
             ego_d_to_cw = self.get_route_len(self.ego_route[:ego_collision_point_i + 1])
-            ego_time_to_cw = ego_d_to_cw / (self.ego_target_speed * 1000 / 60 / 60) # to m / s
+            ego_speed = self.ego_target_speed * 1000 / 60 / 60 # to m / s
+            # TODO
+            buffer = random.uniform(0.3, 0.5)
+            ego_time_to_cw = ego_d_to_cw / (ego_speed - buffer) 
 
             # calculate walker time to crosswalk
             walker_collision_point_i = 2
@@ -103,7 +107,6 @@ class ScenarioManager:
 
             print(f'ego_time_to_cw: {ego_time_to_cw}\nwalker_time_to_cw: {walker_time_to_cw}')
 
-            #TODO fix walker too slow issue
             walker_delay = max(0, ego_time_to_cw - walker_time_to_cw) 
             # walker_delay += 1.0
             delay_tick = int(walker_delay / fixed_delta_seconds)
@@ -122,6 +125,12 @@ class ScenarioManager:
             if not self.ped.has_started:  
                 # self.ped.start_walker(self.walker_route)
                 self.ped.apply_manual_control(direction=direction)
+            
+            walker_speed_diff = self.walker_max_speed - self.ped.get_speed()
+            ego_speed_diff = self.ego_target_speed - self.ego.get_speed()
+
+            print(f'walker speed diff: {walker_speed_diff} / car speed diff: {ego_speed_diff}')
+            
 
 
     def load_weather(self):

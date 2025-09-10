@@ -1,3 +1,4 @@
+import math
 import carla
 import random
 import queue
@@ -127,6 +128,12 @@ class Car:
                     break
         except Exception as e:
             print(e)
+    
+    def get_speed(self):
+        if not self.car: return 0.0
+
+        v = self.car.get_velocity()
+        return math.sqrt(v.x**2 + v.y**2 + v.z**2) * 3.6
 
     def is_at_traffic_light(self):
         if not self.car:
@@ -188,3 +195,4 @@ class Car:
         self.clear_all_q()
         print(f'{len(self.collision_data)} collisions happened')
         self.collision_data.clear()
+        cv2.destroyAllWindows()

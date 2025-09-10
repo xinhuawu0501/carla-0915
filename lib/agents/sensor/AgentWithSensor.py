@@ -74,17 +74,6 @@ class AgentWithSensor(Car, gym.Env):
         self.planner = CustomPlanner(self.car, route=ego_route, target_speed=ego_target_speed)
         self.scenario.run_scenario(ego=self, planner=self.planner)
 
-        while True:
-            control = self.get_planner_control()
-            self.car.apply_control(control)
-
-            self.display_img(img_type=Sensor.RGB)
-
-            if self.env.is_sync:
-                self.env.world.tick()
-                self.scenario.tick()
-            else:
-                self.env.world.wait_for_tick()  
  
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
