@@ -23,7 +23,7 @@ class ScenarioManager:
 
         self.config = load_yaml(os.path.join(os.getcwd(), 'lib/env_setup/config.yaml'))
         self.traffic_size = random.randint(10, 50)
-        self.walker_speed = 1 + random.random() # between 1 and 2 m/s
+        self.walker_max_speed = 1.4 + random.uniform(-0.6, 0.6) #between 0.8 and 2 m/s
         self.ego_target_speed = 10
 
         # self.env.spawn_NPC_cars(self.traffic_size)
@@ -65,14 +65,20 @@ class ScenarioManager:
         except Exception as e:
             print(e)           
 
-    def get_route_len(self, route: list[carla.Waypoint]):
+    def get_route_len(self, route: list[carla.Waypoint] | list[carla.Location]):
         d = 0
 
         try:
             for i in range(len(route) - 1):
-                cur = route[i].transform.location
-                next = route[i + 1].transform.location
-                d += self.env.get_distance(cur, next)
+                # Waypoint obj
+                if hasattr(route[i], 'transform'):
+                    cur = route[i].transform.location
+                    next = route[i + 1].transform.location
+                    d += self.env.get_distance(cur, next)
+                else: # Location obj
+                    cur = route[i]
+                    next = route[i + 1]
+                    d += self.env.get_distance(cur, next)
             
             return d
         except Exception as e:
@@ -82,15 +88,16 @@ class ScenarioManager:
     def run_scenario(self, ego: Car, planner: CustomPlanner):
         try:
             # calculate ego's estimated time to crosswalk
-            mid_i = int(len(self.ego_route) / 2)
-            ego_d_to_cw = self.get_route_len(self.ego_route[:mid_i + 1])
+            ego_collision_point_i = int(len(self.ego_route) / 2)
+            ego_d_to_cw = self.get_route_len(self.ego_route[:ego_collision_point_i + 1])
             ego_time_to_cw = ego_d_to_cw / (self.ego_target_speed * 1000 / 60 / 60) # to m / s
 
             # calculate walker time to crosswalk
-            walker_d_to_cw = self.env.get_distance(self.walker_route[0], self.walker_route[2])
-            walker_time_to_cw = walker_d_to_cw / self.walker_speed # sec
+            walker_collision_point_i = 2
+            walker_d_to_cw = self.get_route_len(self.walker_route[:walker_collision_point_i + 1])
+            walker_time_to_cw = walker_d_to_cw / self.walker_max_speed # sec
             
-            self.ped = Pedestrian(self.env.world, route=self.walker_route, speed=self.walker_speed)
+            self.ped = Pedestrian(self.env.world, route=self.walker_route, speed=self.walker_max_speed)
             fixed_delta_seconds = self.settings.fixed_delta_seconds
 
             print(f'ego_time_to_cw: {ego_time_to_cw}\nwalker_time_to_cw: {walker_time_to_cw}')
