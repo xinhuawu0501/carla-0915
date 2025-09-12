@@ -13,6 +13,19 @@ from lib.util.transform import get_direction
 def load_yaml(file_path):
     with open(file_path, "r") as f:
         return yaml.safe_load(f)
+    
+
+class LOC_TYPE(Enum):
+    INTERSECTION='4_way_intersection'
+    T_JUNCTION='t_junction'
+    UNSIGNALIZED_MIN_JUNCTION='unsignalized_minor_junction'
+
+
+junction_map = {
+    LOC_TYPE.INTERSECTION: [189],
+    LOC_TYPE.T_JUNCTION: [23, 532, 468, 719],
+    LOC_TYPE.UNSIGNALIZED_MIN_JUNCTION: [134, 895, 664]
+}
 
 class ScenarioManager:
     def __init__(self, env: CarlaEnv):
@@ -27,19 +40,17 @@ class ScenarioManager:
         self.cur_walker_i = 0
         self._ego_route = None
 
-        # self.env.spawn_NPC_cars(self.traffic_size)
-
-        # log current scenario
         self.log_current_scenario()
-
-    def set_ego(self, ego: Car, ego_planner: CustomPlanner):
-        self.ego = ego
-        self.ego_planner = ego_planner
 
     def get_actor_routes(self):
         try:
-            target_polygon = random.choice(self.env.get_all_crosswalk_polygons())
-            lanes = self.env._get_lanes_passing_crosswalk(target_polygon)
+            target_junction_id = random.choice(junction_map[self.cur_location_type])
+
+            cws_in_junctions = self.env.junction_wps_map.get(target_junction_id)
+            target_polygon_i = random.choice(list(cws_in_junctions.keys()))
+            target_polygon = self.env.all_cw_polygons[target_polygon_i]
+     
+            lanes = self.env._get_lanes_passing_crosswalk(junction_id=target_junction_id, polygon_id=target_polygon_i)
 
             # calculate ego vehicle route
             self._ego_route = random.choice(lanes['turning'])
@@ -58,8 +69,8 @@ class ScenarioManager:
             self.walker_route = [closest_sidewalk_wp_loc, closest_cw, self.collision_wp.transform.location, opposite_cw, opposite_sidewalk_loc]
             
             # debugging util
-            # self.env.draw_locations(self.walker_route, 'walker route')
-            # self.env.draw_waypoints(self._ego_route)
+            self.env.draw_locations(self.walker_route, 'walker route')
+            self.env.draw_waypoints(self._ego_route)
             # self.env.draw_waypoints([collision_wp], 'collision')
             self.env.move_spectator_to_loc(self.collision_wp.transform.location)
 
@@ -169,7 +180,7 @@ class ScenarioManager:
             self.cur_scenario = random.choice(scenario_options)
 
             location_types = self.cur_scenario["location_types"]
-            self.cur_location_type = random.choice(location_types)
+            self.cur_location_type = LOC_TYPE(random.choice(location_types))
 
             walker_config = self.cur_scenario['pedestrian']
             self.walker_max_speed = random.choice(walker_config['max_speed'])

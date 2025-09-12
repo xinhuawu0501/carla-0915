@@ -21,8 +21,8 @@ class CarlaEnv():
         self.spectator = self.world.get_spectator()
         self.vehicle_bps = self.world_bp.filter('vehicle.*.*')
 
-        self.crosswalks = self.get_all_crosswalk()
-        self.intersections = self.get_all_intersections()
+        self.all_cw_polygons = self._get_all_crosswalk_polygons()
+        self.junction_wps_map = self.get_all_wp_in_junctions()
         
     def move_spectator_to_loc(self, location):
         spec_trans = location 
@@ -125,28 +125,36 @@ class CarlaEnv():
         self.crosswalks = self.world_map.get_crosswalks()
         return self.crosswalks
     
-    def get_all_crosswalk_polygons(self):
+    def _get_all_crosswalk_polygons(self):
         polygons = []
-        
+        self.get_all_crosswalk()
+
         for i in range(0, len(self.crosswalks), 5):
             cw_group = self.crosswalks[i:i + 5]
             polygons.append(cw_group)
 
         return polygons
     
-    def _get_crosswalk_polygon(self, crosswalk_point) -> list[carla.Location]:
-        try:
-            polygons = self.get_all_crosswalk_polygons()
-            target_group = list(filter(lambda group: crosswalk_point in group, polygons))[0]
-            for p in target_group:
-                p.z = 0
+    def get_all_wp_in_junctions(self):
+        waypoints = self.generate_wp(2.0)
+        junction_wps_map = {}
 
-            return target_group
-            
-            
-        except Exception as e:
-            print(f'_get_crosswalk_polygon err: {e}')
-            return []
+        for wp in waypoints:
+            if wp.is_intersection:
+                junction = wp.get_junction()
+
+                if not junction_wps_map.get(junction.id):
+                    junction_wps_map[junction.id] = {} 
+
+                # only store wps in crosswalks 
+                for i, p in enumerate(self.all_cw_polygons):
+                    if self.wp_is_in_polygon(wp=wp, target_polygon=p):
+                        if not junction_wps_map[junction.id].get(i):
+                            junction_wps_map[junction.id][i] = []
+
+                        junction_wps_map[junction.id][i].append(wp)
+                        
+        return junction_wps_map
         
     def generate_navigation_from_wp(self, wp, before_wp=20.0, after_wp=20.0, d=5.0):
         nav = []
@@ -184,11 +192,13 @@ class CarlaEnv():
         p = Point(wp.transform.location.x, wp.transform.location.y)
         return pol.contains(p)
 
-    def _get_lanes_passing_crosswalk(self, target_polygon: list[carla.Location], len_before=50.0, len_after=50.0, d=5.0):
+
+    def _get_lanes_passing_crosswalk(self, junction_id: int, polygon_id: int, len_before=50.0, len_after=50.0, d=5.0):
         lanes_to_crosswalk = {'straight': [], 'turning': []}
         try:
-            wps_in_crosswalk_polygon = [wp for wp in self.intersections if self.wp_is_in_polygon(target_polygon=target_polygon, wp=wp)]
-
+            polygons_in_junction = self.junction_wps_map.get(junction_id)
+            wps_in_crosswalk_polygon = polygons_in_junction.get(polygon_id)
+       
             for i, wp in enumerate(wps_in_crosswalk_polygon):
                 route = self.generate_navigation_from_wp(wp, before_wp=len_before, after_wp=len_after, d=d)
                 if not route:
@@ -237,13 +247,7 @@ class CarlaEnv():
         maps = self.client.get_available_maps()
         return maps
 
-    def get_all_intersections(self, draw_str=False):
-        waypoints = self.generate_wp(2.0)
 
-        self.intersections = [wp for wp in waypoints if wp.is_intersection]
-        if draw_str:
-            self.draw_waypoints(self.intersections)
-        return self.intersections
  
     def change_weather(self,sun_altitude_angle=70.0, precipitation=0.0, cloudiness=0.0, fog_density=0.0):
         weather = carla.WeatherParameters(
