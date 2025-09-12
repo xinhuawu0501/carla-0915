@@ -11,12 +11,12 @@ def init():
             agent.reset()
             step = 0
             while True:
-                if step >= 300:
+                if step >= 800:
                     break
                 control = agent.get_planner_control()
                 agent.car.apply_control(control)
 
-                # agent.display_img(img_type=Sensor.RGB)
+                agent.display_img(img_type=Sensor.RGB)
 
                 if agent.env.is_sync:
                     agent.scenario.tick()

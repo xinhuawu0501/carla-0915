@@ -20,7 +20,9 @@ class CarlaEnv():
         self.spawn_points = self.world_map.get_spawn_points()
         self.spectator = self.world.get_spectator()
         self.vehicle_bps = self.world_bp.filter('vehicle.*.*')
+
         self.crosswalks = self.get_all_crosswalk()
+        self.intersections = self.get_all_intersections()
         
     def move_spectator_to_loc(self, location):
         spec_trans = location 
@@ -175,29 +177,23 @@ class CarlaEnv():
 
         except Exception as e:
             print(f"[WARN] Failed to generate navigation: {e}")
-
         return nav
+    
+    def wp_is_in_polygon(self, target_polygon: list[carla.Location], wp: carla.Waypoint) -> bool:
+        pol = Polygon([(pt.x, pt.y) for pt in target_polygon])
+        p = Point(wp.transform.location.x, wp.transform.location.y)
+        return pol.contains(p)
 
-    def _get_lanes_passing_crosswalk(self, target_polygon: list[carla.Location], len_before=50.0, len_after=20.0, d=3.0):
+    def _get_lanes_passing_crosswalk(self, target_polygon: list[carla.Location], len_before=50.0, len_after=50.0, d=5.0):
         lanes_to_crosswalk = {'straight': [], 'turning': []}
         try:
-            if not hasattr(self, 'intersections'):
-                self.get_all_intersections()
-                
-
-            if not hasattr(self, 'crosswalks'):
-                self.get_all_crosswalk()
-
-            crosswalk_polygon = Polygon([(pt.x, pt.y) for pt in target_polygon])
-            wps_in_crosswalk_polygon = [wp for wp in self.intersections if crosswalk_polygon.contains(Point(wp.transform.location.x, wp.transform.location.y))]
+            wps_in_crosswalk_polygon = [wp for wp in self.intersections if self.wp_is_in_polygon(target_polygon=target_polygon, wp=wp)]
 
             for i, wp in enumerate(wps_in_crosswalk_polygon):
-                before = len_before
-                after = len_after
-                d = d
-                route = self.generate_navigation_from_wp(wp, before_wp=before, after_wp=after, d=d)
+                route = self.generate_navigation_from_wp(wp, before_wp=len_before, after_wp=len_after, d=d)
+                if not route:
+                    continue
 
-                if not len(route): continue
                 start = route[0]
                 yaw_diff = get_yaw_diff(wp.transform, start.transform)
                 
@@ -210,19 +206,6 @@ class CarlaEnv():
         
         return lanes_to_crosswalk
 
-
-    def _get_closest_crosswalk_point_from_wp(self, crosswalk_pol, wp)->carla.Location:
-        loc = wp.transform.location
-        min_d = 1000000
-        result = None
-
-        for p in crosswalk_pol:
-            d = self.get_distance(p, loc)
-            if d < min_d:
-                min_d = d
-                result = p
-
-        return result
     
     def get_sidewalks(self, x_range=(-300, 300), y_range=(-300, 300), step=2.0) -> list[carla.Waypoint]:
         sidewalk_wps = []
@@ -276,13 +259,6 @@ class CarlaEnv():
             actors = self.world.get_actors()
             for a in actors:
                 type_id = a.type_id
-
-                if type_id.startswith('controller.ai'):
-                    a.stop()
-
-                elif type_id.startswith('sensor.'):
-                    if a.is_listening:
-                        a.stop() 
 
                 if type_id.startswith('sensor.') or type_id.startswith('vehicle.') or type_id.startswith('walker.'):
                     print(f'destroy {type_id} with id {a.id}')

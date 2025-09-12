@@ -7,7 +7,6 @@ from lib.env_setup.carla_env import CarlaEnv
 import yaml
 import os
 import time
-
 from lib.env_setup.pedestrian import Pedestrian
 from lib.util.transform import get_direction
 
@@ -26,11 +25,12 @@ class ScenarioManager:
         self.config = load_yaml(os.path.join(os.getcwd(), 'lib/env_setup/config.yaml'))
         self.traffic_size = random.randint(10, 50)
         self.walker_max_speed = 1.4 + random.uniform(-0.6, 0.6) #between 0.8 and 2 m/s
-        self.ego_target_speed = 50
-        self.num_of_walker = 5
+        self.ego_target_speed = 40
+        self.num_of_walker = 15
 
         self.walker_start_frame = []
         self.cur_walker_i = 0
+        self._ego_route = None
 
         # self.env.spawn_NPC_cars(self.traffic_size)
 
@@ -44,15 +44,15 @@ class ScenarioManager:
 
     def get_actor_routes(self):
         try:
-            #TODO: 
             target_polygon = random.choice(self.env.get_all_crosswalk_polygons())
             lanes = self.env._get_lanes_passing_crosswalk(target_polygon)
-            # calculate ego vehicle route
-            self.ego_route = random.choice(lanes['turning'])
-            collision_wp = self.ego_route[int(len(self.ego_route) / 2)]
 
+            # calculate ego vehicle route
+            self._ego_route = random.choice(lanes['turning'])
+            self.collision_wp = next((wp for wp in self._ego_route if self.env.wp_is_in_polygon(wp=wp, target_polygon=target_polygon)), self._ego_route[len(self._ego_route) // 2])
+           
            # determine which side in crosswalk polygon
-            closest_cw = min(target_polygon, key=lambda loc: self.env.get_distance(loc, collision_wp.transform.location))
+            closest_cw = min(target_polygon, key=lambda loc: self.env.get_distance(loc, self.collision_wp.transform.location))
             opposite_cw = max(target_polygon, key=lambda loc: self.env.get_distance(loc, closest_cw))
         
             # calculate walker route
@@ -61,27 +61,29 @@ class ScenarioManager:
             opposite_sidewalk_wp = min(self.sidewalks, key=lambda sw: self.env.get_distance(sw.transform.location, opposite_cw))
             opposite_sidewalk_loc = opposite_sidewalk_wp.transform.location
 
-            self.walker_route = [closest_sidewalk_wp_loc, closest_cw, collision_wp.transform.location, opposite_cw, opposite_sidewalk_loc]
+            self.walker_route = [closest_sidewalk_wp_loc, closest_cw, self.collision_wp.transform.location, opposite_cw, opposite_sidewalk_loc]
             
             # debugging util
             # self.env.draw_locations(self.walker_route, 'walker route')
-            # self.env.draw_waypoints(self.ego_route)
+            # self.env.draw_waypoints(self._ego_route)
             # self.env.draw_waypoints([collision_wp], 'collision')
-            self.env.move_spectator_to_loc(collision_wp.transform.location)
+            self.env.move_spectator_to_loc(self.collision_wp.transform.location)
+
+            return self.collision_wp
         except Exception as e:
-            print(e)           
+            print(f'fail to get actor route: {e}')           
 
     def get_route_len(self, route: list[carla.Waypoint] | list[carla.Location]):
         d = 0
 
         try:
             for i in range(len(route) - 1):
-                # Waypoint obj
+                # Waypoint obj for car
                 if hasattr(route[i], 'transform'):
                     cur = route[i].transform.location
                     next = route[i + 1].transform.location
                     d += self.env.get_distance(cur, next)
-                else: # Location obj
+                else: # Location obj for walker
                     cur = route[i]
                     next = route[i + 1]
                     d += self.env.get_distance(cur, next)
@@ -97,11 +99,14 @@ class ScenarioManager:
             self.get_actor_routes()
 
             # calculate ego's estimated time to crosswalk
-            ego_collision_point_i = int(len(self.ego_route) / 2)
+            ego_collision_point_i = self._ego_route.index(self.collision_wp)
+
+            self.env.draw_waypoints([self._ego_route[ego_collision_point_i]])
+
             ego_d_to_cw = self.get_route_len(self.ego_route[:ego_collision_point_i + 1])
             ego_speed = self.ego_target_speed * 1000 / 60 / 60 # to m / s
             
-            buffer = random.uniform(0.1, 0.3)
+            buffer = 0 #random.uniform(0.1, 0.3)
             ego_time_to_cw = ego_d_to_cw / (ego_speed - buffer) 
 
             # calculate walker time to crosswalk
@@ -112,19 +117,21 @@ class ScenarioManager:
             fixed_delta_seconds = self.settings.fixed_delta_seconds
 
             walker_delay = ego_time_to_cw - walker_time_to_cw
-            walker_spawn_interval = 6 # sec
+            walker_spawn_interval = 5 # sec
 
-            # for debugging
-            ego_arr_frame = self.world.get_snapshot().frame + int(ego_time_to_cw / fixed_delta_seconds)
+            if walker_delay < 0:
+                print('delay', walker_delay)
+            
+            target_start_frame = self.world.get_snapshot().frame + int(walker_delay / fixed_delta_seconds)
 
             for i in range(self.num_of_walker):
-                j = i - int(self.num_of_walker / 2)
-                delay = walker_delay + walker_spawn_interval * j
-                delay_tick = int(delay / fixed_delta_seconds)
-                start_frame = self.world.get_snapshot().frame + delay_tick + 1 / fixed_delta_seconds
+                j = i - self.num_of_walker // 2
+                start_frame = max(self.world.get_snapshot().frame, target_start_frame + (walker_spawn_interval / fixed_delta_seconds) * j)
+                
                 self.walker_start_frame.append(start_frame)
+                
 
-            print(f'walker starts at {self.walker_start_frame} frames; ego arrived at {ego_arr_frame} frame')
+            print(f'walker starts at {self.walker_start_frame} frames')
   
         except Exception as e:
             print(f'run scenario fail: {e}')
@@ -132,7 +139,6 @@ class ScenarioManager:
     def tick(self):
         """Call this once per env.step() to update scenario logic"""
         frame = self.world.get_snapshot().frame
-        print(frame)
 
         if self.cur_walker_i < self.num_of_walker and frame >= self.walker_start_frame[self.cur_walker_i]:
             print(f'spawn {self.cur_walker_i} walker at frame {frame}')
@@ -168,3 +174,9 @@ class ScenarioManager:
         cur_map = self.env.world_map.name
 
         print(f'Loading {cur_map}\n')
+    
+    @property
+    def ego_route(self) -> list:
+        if not self._ego_route:
+            raise NotImplementedError
+        return self._ego_route
