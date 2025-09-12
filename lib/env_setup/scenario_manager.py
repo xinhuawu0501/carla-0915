@@ -21,12 +21,7 @@ class ScenarioManager:
         self.settings = self.world.get_settings()
         self.sidewalks = self.env.get_sidewalks()
 
-        #TODO: move scenario config to config.yaml
-        self.config = load_yaml(os.path.join(os.getcwd(), 'lib/env_setup/config.yaml'))
-        self.traffic_size = random.randint(10, 50)
-        self.walker_max_speed = 1.4 + random.uniform(-0.6, 0.6) #between 0.8 and 2 m/s
-        self.ego_target_speed = 40
-        self.num_of_walker = 15
+        self.load_scenario_config()
 
         self.walker_start_frame = []
         self.cur_walker_i = 0
@@ -35,7 +30,6 @@ class ScenarioManager:
         # self.env.spawn_NPC_cars(self.traffic_size)
 
         # log current scenario
-        self.load_weather()
         self.log_current_scenario()
 
     def set_ego(self, ego: Car, ego_planner: CustomPlanner):
@@ -155,9 +149,7 @@ class ScenarioManager:
         self.world.tick()
 
 
-    def load_weather(self):
-        visibility = self.config["visibility"]
-
+    def load_weather(self, visibility):
         weather = random.choice(visibility['high'])
         precipitation, fog_density, sun_altitude_angle, cloudiness = (
             float(weather.get(k, 0.0)) for k in ['precipitation', 'fog_density', 'sun_altitude_angle', 'cloudiness']
@@ -167,6 +159,28 @@ class ScenarioManager:
 
         self.env.change_weather(cloudiness=cloudiness, precipitation=precipitation, fog_density=fog_density, sun_altitude_angle=sun_altitude_angle)
 
+    def load_scenario_config(self):
+        try:
+            config = load_yaml(os.path.join(os.getcwd(), 'lib/env_setup/config.yaml'))
+            
+            config_env = config["env"]
+            visibility = config_env["visibility"]    
+            scenario_options = config["scenarios"]
+            self.cur_scenario = random.choice(scenario_options)
+
+            location_types = self.cur_scenario["location_types"]
+            self.cur_location_type = random.choice(location_types)
+
+            walker_config = self.cur_scenario['pedestrian']
+            self.walker_max_speed = random.choice(walker_config['max_speed'])
+            self.num_of_walker = random.choice(walker_config["num_of_pedestrian"])
+
+            ego_config = self.cur_scenario['ego']
+            self.ego_target_speed = random.choice(ego_config["target_speed"])
+
+            self.load_weather(visibility=visibility)
+        except Exception as e:
+            print(f'fail to load scenario: {e}')
 
 
     def log_current_scenario(self):
@@ -174,7 +188,8 @@ class ScenarioManager:
         cur_map = self.env.world_map.name
 
         print(f'Loading {cur_map}\n')
-    
+        print(f'Scenario: {self.cur_scenario["name"]}\nLocation type: {self.cur_location_type}\nEgo target speed {self.ego_target_speed}\nWalker max speed {self.walker_max_speed}')
+        
     @property
     def ego_route(self) -> list:
         if not self._ego_route:

@@ -1,33 +1,53 @@
-#clearNoon, CloudyNoon, WetNoon, WetCloudyNoon, SoftRainNoon, MidRainyNoon, HardRainNoon, 
-#ClearSunset, CloudySunset, WetSunset, WetCloudySunset, SoftRainSunset, MidRainSunset, HardRainSunset.
+env:
+    visibility:
+      high:
+        - id: clear_noon
+          precipitation: 0.0
+          cloudiness: 0.0
+          fog_density: 0.0
+          sun_altitude_angle: 90.0
 
-visibility:
-  high:
-    - id: clear_noon
-      precipitation: 0.0
-      cloudiness: 0.0
-      fog_density: 0.0
-      sun_altitude_angle: 90.0
+        - id: clear_sunset
+          precipitation: 0.0
+          cloudiness: 0.0
+          fog_density: 0.0
+          sun_altitude_angle: 10.0
 
-    - id: clear_sunset
-      precipitation: 0.0
-      cloudiness: 0.0
-      fog_density: 0.0
-      sun_altitude_angle: 10.0
+      low:
+        - id: heavy_rain_night
+          precipitation: 100.0
+          cloudiness: 100.0
+          fog_density: 0.0
+          sun_altitude_angle: -10.0
 
-  low:
-    - id: heavy_rain_night
-      precipitation: 100.0
-      cloudiness: 100.0
-      fog_density: 0.0
-      sun_altitude_angle: -10.0
+        - id: heavy_fog_night
+          precipitation: 0.0
+          cloudiness: 100.0
+          fog_density: 100.0
+          sun_altitude_angle: -10.0
 
-    - id: heavy_fog_night
-      precipitation: 0.0
-      cloudiness: 100.0
-      fog_density: 100.0
-      sun_altitude_angle: -10.0
-
-
-
+scenarios:
+  - name: pedestrian_crossing_at_junction
+    location_types:
+      - 4_way_intersection
+      - t_junction
+      - minor_unsignalized_junction 
+    traffic: #TODO
+    pedestrian:
+      max_speed:
+        - 0.8
+        - 1.4
+        - 2.0
+      num_of_pedestrian:
+        - 1
+        - 5
+        - 10
+    ego:
+      target_speed:
+        - 10
+        - 25
+        - 40
+       
+  # - name: pedestrian_crossing_infrontof_bus
   
+    
