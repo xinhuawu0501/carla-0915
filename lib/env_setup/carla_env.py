@@ -258,17 +258,23 @@ class CarlaEnv():
         )
         self.world.set_weather(weather)
 
+    def batch_destroy_actors(self, actor_list):
+        '''
+        for destroying npc walker and cars. Do not use for sensors.
+        '''
+        try:
+            result = self.client.apply_batch_sync([carla.command.DestroyActor(x.id) for x in actor_list])
+            
+            for r in result:
+                result_str = f'successfully destroyed {r.actor_id}' if not r.error else f'Error destroying {r.actor_id} with error {r.error}'
+                print(result_str)
+            
+            return result
+        except Exception as e:
+            print(e)
+
     def cleanup(self):
         try:   
-            actors = self.world.get_actors()
-            for a in actors:
-                type_id = a.type_id
-
-                if type_id.startswith('sensor.') or type_id.startswith('vehicle.') or type_id.startswith('walker.'):
-                    print(f'destroy {type_id} with id {a.id}')
-                    a.destroy()
-        
-            
             if self.is_sync:
                 settings = self.world.get_settings()
                 settings.synchronous_mode = False

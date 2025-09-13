@@ -37,6 +37,7 @@ class ScenarioManager:
         self.load_scenario_config()
 
         self.walker_start_frame = []
+        self.walkers = []
         self.cur_walker_i = 0
         self._ego_route = None
 
@@ -68,10 +69,6 @@ class ScenarioManager:
 
             self.walker_route = [closest_sidewalk_wp_loc, closest_cw, self.collision_wp.transform.location, opposite_cw, opposite_sidewalk_loc]
             
-            # debugging util
-            self.env.draw_locations(self.walker_route, 'walker route')
-            self.env.draw_waypoints(self._ego_route)
-            # self.env.draw_waypoints([collision_wp], 'collision')
             self.env.move_spectator_to_loc(self.collision_wp.transform.location)
 
             return self.collision_wp
@@ -106,8 +103,6 @@ class ScenarioManager:
             # calculate ego's estimated time to crosswalk
             ego_collision_point_i = self._ego_route.index(self.collision_wp)
 
-            self.env.draw_waypoints([self._ego_route[ego_collision_point_i]])
-
             ego_d_to_cw = self.get_route_len(self.ego_route[:ego_collision_point_i + 1])
             ego_speed = self.ego_target_speed * 1000 / 60 / 60 # to m / s
             
@@ -132,11 +127,13 @@ class ScenarioManager:
             for i in range(self.num_of_walker):
                 j = i - self.num_of_walker // 2
                 start_frame = max(self.world.get_snapshot().frame, target_start_frame + (walker_spawn_interval / fixed_delta_seconds) * j)
-                
-                self.walker_start_frame.append(start_frame)
-                
-
-            print(f'walker starts at {self.walker_start_frame} frames')
+                if start_frame not in self.walker_start_frame:
+                    self.walker_start_frame.append(start_frame)
+            
+            # update number of walker 
+            self.num_of_walker = len(self.walker_start_frame)
+            
+            # print(f'walker starts at {self.walker_start_frame} frames')
   
         except Exception as e:
             print(f'run scenario fail: {e}')
@@ -146,8 +143,8 @@ class ScenarioManager:
         frame = self.world.get_snapshot().frame
 
         if self.cur_walker_i < self.num_of_walker and frame >= self.walker_start_frame[self.cur_walker_i]:
-            print(f'spawn {self.cur_walker_i} walker at frame {frame}')
             ped = Pedestrian(self.env.world, route=self.walker_route, max_speed=self.walker_max_speed)
+            self.walkers.append(ped.walker)
  
             ped.set_manual_control()
             direction = get_direction(self.walker_route[0], self.walker_route[-1])
@@ -200,6 +197,10 @@ class ScenarioManager:
 
         print(f'Loading {cur_map}\n')
         print(f'Scenario: {self.cur_scenario["name"]}\nLocation type: {self.cur_location_type}\nEgo target speed {self.ego_target_speed}\nWalker max speed {self.walker_max_speed}')
+        
+    def cleanup(self):
+        self.env.batch_destroy_actors(self.walkers)
+        self.walkers.clear()
         
     @property
     def ego_route(self) -> list:

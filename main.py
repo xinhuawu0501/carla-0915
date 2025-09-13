@@ -4,7 +4,7 @@ from lib.env_setup.car import Sensor
 def init():   
     agent = AgentWithSensor()
     step = 0
-    round = 50
+    round = 20
     num_of_col = 0
     try:
         for _ in range(round):
@@ -26,13 +26,12 @@ def init():
                 step += 1
             if agent.collision_data:
                 num_of_col += 1
-            agent.cleanup()
+
+            agent.close()
         
         print(f'collision count {num_of_col} in {round} simulation')
        
     except KeyboardInterrupt:
-        pass
-    finally:
         agent.close()
 
 init()

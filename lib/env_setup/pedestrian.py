@@ -19,6 +19,8 @@ class Pedestrian:
         self.walker = self._spawn_walker()
         self.has_started = False
 
+        self.controller = None
+
     def _spawn_walker(self):
         try:
             bp = random.choice(self.walker_bps)
@@ -96,6 +98,14 @@ class Pedestrian:
         if d <= threshold:
             return True
         else: return False
+
+    def cleanup(self):
+        if self.controller:
+            self.controller.stop()
+            self.controller.destroy()
+        
+        if self.walker:
+            self.walker.destroy()
 
 
 

@@ -19,7 +19,7 @@ import queue
 class AgentWithSensor(Car, gym.Env):
     def __init__(self):
        self.env = CarlaEnv()
-       super().__init__(self.env.world)
+       super().__init__(self.env)
 
        self.env.set_sync()
 
@@ -76,9 +76,6 @@ class AgentWithSensor(Car, gym.Env):
  
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
-        self.env.cleanup()
-        self.cleanup()
-
         self.setup_scenario()
 
         self.world.tick()
@@ -135,9 +132,8 @@ class AgentWithSensor(Car, gym.Env):
     
     
     def close(self):
-        self.env.cleanup()
+        #clean up ego car and its sensors
         self.cleanup()
 
-        print(f'cleaned up')
- 
-
+        #clean up npc walkers and cars
+        self.scenario.cleanup() 

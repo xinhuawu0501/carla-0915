@@ -7,6 +7,7 @@ import numpy as np
 import cv2
 
 from lib.constants.camera import CITYSCAPES_PALETTE, IMG_X, IMG_Y
+from lib.env_setup.carla_env import CarlaEnv
 from lib.util.image_processing import cv_display, process_rgb_img, process_semantic_img
 
 class Sensor(Enum):
@@ -27,19 +28,18 @@ DEFAULT_CAM_ATTR = {
 }
 
 class Car:
-    collision_data = []
-    sensors = []
-
-    def __init__(
-            self, 
-            world):
-        self.world = world
+    def __init__(self, env: CarlaEnv):
+        self.env = env
+        self.world = env.world
         self.world_bp = self.world.get_blueprint_library()
         self.vehicle_bps = self.world_bp.filter('vehicle.*.*')
         self.all_sps = self.world.get_map().get_spawn_points()
 
         self.image_queue = queue.Queue()
         self.semantic_img_queue = queue.Queue()
+
+        self.collision_data = []
+        self.sensors = []
 
         self.car = None
         
@@ -51,7 +51,6 @@ class Car:
             sensor_options = {**DEFAULT_SENSOR_OPTION, **sensor_options}
         
             self.car = self.world.spawn_actor(self.vehicle_bp, sp)
-            print(f'spawned {self.car.id} with sensor {sensor_options}')
 
             cam_transform = carla.Transform(carla.Location(x=-4, z=3), carla.Rotation(pitch=-15))
 
@@ -79,7 +78,10 @@ class Car:
                 self.colsen = self.world.spawn_actor(self.colsen_bp, carla.Transform(), attach_to=self.car)
                 self.colsen.listen(lambda event: self.on_collision(event))
                 self.sensors.append(self.colsen)
-
+            
+            sensor_ids = [s.id for s in self.sensors]  
+            result_str = f'spawned {self.car.id} with sensors {sensor_ids}'
+            print(result_str)
         except Exception as e:
             print(f'spawn car failed {e}')
     
@@ -192,7 +194,20 @@ class Car:
 
     
     def cleanup(self):
+        for sensor in self.sensors:
+            sensor.stop()
+            sensor.destroy()
+
+        self.sensors.clear()
         self.clear_all_q()
-        print(f'{len(self.collision_data)} collisions happened')
         self.collision_data.clear()
+        
+        if self.car:
+            print(f'destroyed car {self.car.id}')
+            self.car.destroy()
+
         cv2.destroyAllWindows()
+
+
+
+
